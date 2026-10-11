@@ -22,6 +22,9 @@ type Service struct {
 	Hidden func() ([]string, error)
 	Show   func(keys []string, shown bool) error
 	Logger *slog.Logger
+	// Cycle returns whether the contracts that do not fit the first page are shown in turn, and how long
+	// each page stays.
+	Cycle func() (on bool, every time.Duration)
 
 	mu        sync.Mutex
 	preview   string
@@ -62,6 +65,15 @@ func (s *Service) SetShown(keys []string, shown bool) (list []LimitContract, err
 	return s.Limits()
 }
 
+// cycleSetting is the saved cycling; without one the pages do not cycle.
+func (s *Service) cycleSetting() (bool, time.Duration) {
+	if s.Cycle == nil {
+		return false, 10 * time.Second
+	}
+	on, every := s.Cycle()
+	return on, every
+}
+
 // Preview returns the latest image as a PNG data URL, or "" before the first image.
 func (s *Service) Preview() string {
 	s.mu.Lock()
@@ -75,14 +87,26 @@ func (s *Service) Preview() string {
 func Run(ctx context.Context, s *Service, renderer *CanvasRenderer, state *usage.State, redraw time.Duration, style func() Style, output func([]byte), emit func(string, any), logger *slog.Logger) {
 	ticker := time.NewTicker(redraw)
 	defer ticker.Stop()
+	cycle, every := s.cycleSetting()
+	turn := time.NewTicker(every)
+	defer turn.Stop()
+	page := 0
 	for {
+		var d time.Duration
+		if cycle, d = s.cycleSetting(); d != every {
+			every = d
+			turn.Reset(d)
+		}
 		stats, source := state.Snapshot()
 		// A selection that cannot be read draws every window, as style does for Gauges.
 		hidden, err := s.hiddenSet()
 		if err != nil {
 			logger.Warn("hidden_limits_unavailable", "cause", err)
 		}
-		frame, err := renderer.Render(ctx, withoutHidden(stats, hidden), time.Now(), source, style())
+		if !cycle {
+			page = 0
+		}
+		frame, err := renderer.Render(ctx, withoutHidden(stats, hidden), time.Now(), source, style(), page)
 		if ctx.Err() != nil {
 			return
 		}
@@ -94,12 +118,27 @@ func Run(ctx context.Context, s *Service, renderer *CanvasRenderer, state *usage
 			s.preview = "data:image/png;base64," + base64.StdEncoding.EncodeToString(frame.PNG)
 			s.mu.Unlock()
 			emit(Updated, nil)
+			if page >= frame.Pages {
+				page = 0
+			}
 		}
-		select {
-		case <-ctx.Done():
-			return
-		case <-state.Changed():
-		case <-ticker.C:
+		pages := frame.Pages
+	wait:
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-state.Changed():
+				break wait
+			case <-ticker.C:
+				break wait
+			case <-turn.C:
+				// Only a cycle over more than one page redraws on this beat.
+				if cycle && pages > 1 {
+					page = (page + 1) % pages
+					break wait
+				}
+			}
 		}
 	}
 }

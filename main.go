@@ -124,7 +124,10 @@ func run() error {
 	}
 	updateService := updates.New(updateConfig, state, logger, emit, updates.LaunchInstaller, controls.ApproveQuit)
 	usageState := usage.NewState()
-	displayService := &display.Service{State: usageState, Logger: logger,
+	displayService := &display.Service{State: usageState, Logger: logger, Cycle: func() (bool, time.Duration) {
+			on, seconds := settings.CycleSetting(settingsService)
+			return on, cycleEvery(seconds)
+		},
 		Hidden: func() ([]string, error) { return settings.HiddenLimits(settingsService) },
 		Show:   func(keys []string, shown bool) error { return settings.SetLimitsShown(settingsService, keys, shown) }}
 	renderer := display.NewCanvasRenderer(displayService, emit)
@@ -167,7 +170,7 @@ func run() error {
 		go output.Run(ctx)
 		sink = output.Submit
 	}
-	settingsService.OnStyleSaved = usageState.Touch
+	settingsService.OnDisplaySaved = usageState.Touch
 	go display.Run(ctx, displayService, renderer, usageState, redrawInterval(), func() display.Style { return display.ParseStyle(settings.LimitStyle(settingsService)) }, sink, emit, logger)
 	sourceChanged := make(chan struct{}, 1)
 	settingsService.OnSaved = func() {
@@ -300,6 +303,14 @@ func localIntervals() localusage.Intervals {
 		return localusage.Intervals{Settle: 200 * time.Millisecond, Graph: time.Second, Poll: time.Second, Limits: time.Second, MaxSyncDelay: 4 * time.Second}
 	}
 	return localusage.DefaultIntervals
+}
+
+// cycleEvery is how long each page stays for the saved seconds; the E2E tests wait a tenth of it.
+func cycleEvery(seconds int) time.Duration {
+	if shortIntervals() {
+		return time.Duration(seconds) * 100 * time.Millisecond
+	}
+	return time.Duration(seconds) * time.Second
 }
 
 // redrawInterval is the longest time between two images, which keeps the time until reset current.

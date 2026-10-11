@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
-import { Alert, Badge, Button, Card, Group, PasswordInput, Select, Stack, Text, TextInput, Title } from '@mantine/core';
+import { useEffect, useRef, useState } from 'react';
+import { Alert, Badge, Button, Card, Group, NumberInput, PasswordInput, Select, Stack, Text, TextInput, Title } from '@mantine/core';
+import { SwitchButton } from '../../shared/SwitchButton';
 import { ErrorNotice } from '../../shared/ErrorNotice';
 import { automatic, useSettingsDraft } from './SettingsDraft';
 import styles from './ConfigureHub.module.css';
@@ -49,12 +51,34 @@ export function ConnectionSettings() {
   </Card>;
 }
 
-// The style choice sits right of the Style title. It applies and saves at once.
+// The style choice sits right of the Style title; the cycle switch and the time each page stays are
+// at the right end. Every choice applies and saves at once.
 export function StyleSelect() {
   const draft = useSettingsDraft();
+  const [text, setTextState] = useState<number | string>('');
+  // The latest entry, which a key press right after typing reads before the next render.
+  const entry = useRef<number | string>('');
+  const setText = (value: number | string) => { entry.current = value; setTextState(value); };
+  const seconds = draft?.cycleSeconds;
+  useEffect(() => { if (seconds !== undefined) setText(seconds); }, [seconds]);
   if (!draft) return null;
-  return <Select w={160} aria-label="Display style" data={['Gauges', 'Bars']} value={draft.style} allowDeselect={false} error={draft.fields.limitStyle}
-    onChange={value => { if (value) draft.setStyle(value); }} />;
+  // An unchanged or invalid entry shows the saved value again; the server refuses a value out of range.
+  const commit = () => {
+    const value = entry.current;
+    if (typeof value === 'number' && value >= 5 && value <= 3600 && value !== draft.cycleSeconds) draft.setCycleSeconds(value);
+    else setText(draft.cycleSeconds);
+  };
+  return <Group gap="md" wrap="nowrap" justify="space-between" style={{ flex: 1 }}>
+    <Select w={160} aria-label="Display style" data={['Gauges', 'Bars']} value={draft.style} allowDeselect={false} error={draft.fields.limitStyle}
+      onChange={value => { if (value) draft.setStyle(value); }} />
+    <Group gap="md" wrap="nowrap">
+      <Group gap="xs" wrap="nowrap"><Text size="sm">Cycle</Text>
+        <SwitchButton role="switch" label="Cycle" checked={draft.cycle ? 'true' : 'false'} onClick={() => draft.setCycle(!draft.cycle)} /></Group>
+      <NumberInput w={110} aria-label="Cycle time" suffix=" s" min={5} max={3600} step={1} allowDecimal={false} clampBehavior="strict" hideControls
+        styles={{ input: { textAlign: 'right' } }} error={draft.fields.cycleSeconds}
+        value={text} onChange={setText} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter') commit(); }} />
+    </Group>
+  </Group>;
 }
 
 export function StyleError() {
