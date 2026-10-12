@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"math"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -25,6 +26,7 @@ import (
 	"token-monitor-turzx/internal/fault"
 	"token-monitor-turzx/internal/hub"
 	"token-monitor-turzx/internal/localusage"
+	"token-monitor-turzx/internal/presence"
 	"token-monitor-turzx/internal/settings"
 	"token-monitor-turzx/internal/styles"
 	"token-monitor-turzx/internal/turzx"
@@ -125,11 +127,12 @@ func run() error {
 	updateService := updates.New(updateConfig, state, logger, emit, updates.LaunchInstaller, controls.ApproveQuit)
 	usageState := usage.NewState()
 	displayService := &display.Service{State: usageState, Logger: logger, Cycle: func() (bool, time.Duration) {
-			on, seconds := settings.CycleSetting(settingsService)
-			return on, cycleEvery(seconds)
-		},
-		Hidden: func() ([]string, error) { return settings.HiddenLimits(settingsService) },
-		Show:   func(keys []string, shown bool) error { return settings.SetLimitsShown(settingsService, keys, shown) }}
+		on, seconds := settings.CycleSetting(settingsService)
+		return on, cycleEvery(seconds)
+	},
+		Hidden:     func() ([]string, error) { return settings.HiddenLimits(settingsService) },
+		Show:       func(keys []string, shown bool) error { return settings.SetLimitsShown(settingsService, keys, shown) },
+		ShiftEvery: shiftInterval()}
 	renderer := display.NewCanvasRenderer(displayService, emit)
 	output := display.NewOutput(func() (string, error) { return settings.DisplayTarget(settingsService) }, logger)
 	ctx, stop := context.WithCancel(context.Background())
@@ -171,6 +174,13 @@ func run() error {
 		sink = output.Submit
 	}
 	settingsService.OnDisplaySaved = usageState.Touch
+	// The server build is for tests, which cannot press keys, so it never counts idle time as away.
+	conditions := presence.New(func(away bool) { display.SetAway(displayService, away) })
+	idleAfter := func() int { return settings.AwayMinutesSetting(settingsService) * 60 }
+	if serverMode {
+		idleAfter = func() int { return math.MaxInt32 }
+	}
+	go presence.Watch(ctx, conditions, idleAfter)
 	go display.Run(ctx, displayService, renderer, usageState, redrawInterval(), func() display.Style { return display.ParseStyle(settings.LimitStyle(settingsService)) }, sink, emit, logger)
 	sourceChanged := make(chan struct{}, 1)
 	settingsService.OnSaved = func() {
@@ -319,6 +329,14 @@ func redrawInterval() time.Duration {
 		return time.Second
 	}
 	return time.Minute
+}
+
+// shiftInterval is how long the TURZX image stays at one offset against burn-in.
+func shiftInterval() time.Duration {
+	if shortIntervals() {
+		return time.Second
+	}
+	return 3 * time.Minute
 }
 
 func serverPort() (int, error) {
