@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { startServer } from '../../support/server';
 import { startHub } from '../../support/hub';
 import { shortIntervals } from '../../support/local';
+import { measure } from '../../support/shift';
 
 // The server build has no task tray and no TURZX output. Opening the page stands in for opening
 // the window, closing it for hiding the window, and stopping the process for Exit. The image is
@@ -114,9 +115,11 @@ async function extents(page: Page, src: string) {
   }, { src, rects: tokenRows });
 }
 
-// Compare the actual two encodings sent by the resident renderer, allowing JPEG compression.
+// Compare the actual two encodings, accounting for the JPEG-only burn-in shift and compression.
 async function rotationError(page: Page, png: string, jpeg: string) {
-  return page.evaluate(async ({ png, jpeg }) => {
+  const [{ shift: [shiftX, shiftY] }] = await measure(page, [{ png, jpeg }]);
+  expect([[0, 0], [4, 0], [4, 4], [0, 4], [-4, 4], [-4, 0], [-4, -4], [0, -4]]).toContainEqual([shiftX, shiftY]);
+  return page.evaluate(async ({ png, jpeg, shiftX, shiftY }) => {
     const decode = async (type: string, data: string) => {
       const image = new Image();
       image.src = `data:image/${type};base64,${data}`;
@@ -132,7 +135,11 @@ async function rotationError(page: Page, png: string, jpeg: string) {
     let clockwise = 0;
     let counterclockwise = 0;
     for (let y = 0; y < original.height; y++) for (let x = 0; x < original.width; x++) {
-      const source = (y * original.width + x) * 4;
+      const sourceX = x - shiftX;
+      const sourceY = y - shiftY;
+      const outside = sourceX < 0 || sourceX >= original.width || sourceY < 0 || sourceY >= original.height;
+      // The exposed edge has the background colour of the PNG's top-left corner.
+      const source = outside ? 0 : (sourceY * original.width + sourceX) * 4;
       const cw = (x * rotated.width + original.height - 1 - y) * 4;
       const ccw = ((original.width - 1 - x) * rotated.width + y) * 4;
       for (let channel = 0; channel < 3; channel++) {
@@ -142,7 +149,7 @@ async function rotationError(page: Page, png: string, jpeg: string) {
     }
     const count = original.width * original.height * 3;
     return { size: [original.width, original.height, rotated.width, rotated.height], clockwise: clockwise / count, counterclockwise: counterclockwise / count };
-  }, { png, jpeg });
+  }, { png, jpeg, shiftX, shiftY });
 }
 
 test('実描画のJPEGがPNGと時計回り90度で対応し、描画要求の取得失敗後も更新を再開する', async ({ page }) => {
