@@ -167,7 +167,7 @@ test('実描画のJPEGがPNGと時計回り90度で対応し、描画要求の�
     if (!assetsFailed && method === 'token-monitor-turzx/internal/display.Service.AgentIcons') {
       assetsFailed = true;
       await route.fulfill({ status: 503, contentType: 'text/plain', body: 'Injected transient asset RPC failure' });
-    } else if (failRequest && !injected && method === 'token-monitor-turzx/internal/display.Service.RenderRequest') {
+    } else if (failRequest && method === 'token-monitor-turzx/internal/display.Service.RenderRequest') {
       injected = true;
       await route.fulfill({ status: 503, contentType: 'text/plain', body: 'Injected transient renderer RPC failure' });
     } else await route.continue();
@@ -218,6 +218,7 @@ test('実描画のJPEGがPNGと時計回り90度で対応し、描画要求の�
     await page.getByRole('textbox', { name: 'Display style' }).click();
     await page.getByRole('option', { name: 'Bars' }).click();
     expect(await preview(page)).toBe(previous);
+    failRequest = false;
     await expect.poll(async () => (await colours(page, await preview(page))).divider, { timeout: 20_000 }).toEqual(line);
     await checkRotation();
   } finally {
@@ -255,12 +256,17 @@ test('Display style を Bars に切り替えると、保存して Tokens の列�
     let requests = 0;
     await test.step('手順1', async () => {
       // Output sits at the right end of the row of the page heading, above the Style card.
-      const title = await page.getByRole('heading', { name: 'Display settings' }).boundingBox();
-      const style1 = await page.getByRole('heading', { name: 'Style' }).boundingBox();
-      const output1 = await page.getByRole('heading', { name: 'Output' }).boundingBox();
-      expect(Math.abs(output1!.y - title!.y)).toBeLessThan(title!.height);
-      expect(output1!.x).toBeGreaterThan(title!.x + title!.width);
-      expect(output1!.y).toBeLessThan(style1!.y);
+      const headings = page.getByRole('heading').filter({ hasText: /^(Display settings|Style|Output)$/ });
+      await expect(headings).toHaveCount(3);
+      // Read all positions in one browser turn: the update notice can move the whole page.
+      const { 'Display settings': title, Style: style1, Output: output1 } = await headings.evaluateAll(elements =>
+        Object.fromEntries(elements.map(element => {
+          const { x, y, width, height } = element.getBoundingClientRect();
+          return [element.textContent, { x, y, width, height }];
+        })));
+      expect(Math.abs(output1.y - title.y)).toBeLessThan(title.height);
+      expect(output1.x).toBeGreaterThan(title.x + title.width);
+      expect(output1.y).toBeLessThan(style1.y);
       await expect(style()).toHaveValue('Gauges');
       await expect.poll(async () => (await preview(page)).length).toBeGreaterThan(5000);
       const gauges = await preview(page);
@@ -311,7 +317,7 @@ test('Display style を Bars に切り替えると、保存して Tokens の列�
       await style().click();
       await expect(page.getByRole('option')).toHaveText(['Gauges', 'Bars']);
       await page.keyboard.press('Escape');
-      // Taken before the shown minutes change, to see the image drawn again after that.
+      // Remember this image to check that the next minute change redraws it without Hub input.
       const current = await preview(page);
       const shown = await colours(page, current);
       expect(shown.size).toEqual([1920, 462]);
@@ -323,8 +329,8 @@ test('Display style を Bars に切り替えると、保存して Tokens の列�
         expect(right).toBeLessThan(331);
         expect(left).toBeGreaterThan(60);
       }
-      // The image is drawn again without anything from the Hub when the shown minutes change.
-      await expect.poll(() => preview(page), { timeout: 10_000, intervals: [250] }).not.toBe(current);
+      // Setup may have crossed a minute boundary already: allow the next minute plus rendering.
+      await expect.poll(() => preview(page), { timeout: 75_000, intervals: [250] }).not.toBe(current);
       await expect(page.getByText(token)).toHaveCount(0);
       // Lowest remaining first: one (10%) and three (30%) share the first column, four (90%),
       // late (95%) and last (99%) take the next three, and unknown, reporting nothing, finds no room.
