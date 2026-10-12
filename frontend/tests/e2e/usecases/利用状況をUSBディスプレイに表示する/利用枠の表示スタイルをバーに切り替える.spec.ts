@@ -274,15 +274,15 @@ test('Display style を Bars に切り替えると、保存して Tokens の列�
       await style().click();
       await page.getByRole('option', { name: 'Bars' }).click();
       await expect(page.getByText('Saved.')).toHaveCount(0);
-      // A snapshot or timed redraw can change the image before the style is applied.
-      await expect.poll(async () => colours(page, await preview(page))).toMatchObject({
+      await expect.poll(() => file().limitStyle).toBe('Bars');
+      // A previous frame may still be in flight; the renderer allows up to 10s per frame.
+      await expect.poll(async () => colours(page, await preview(page)), { timeout: 20_000 }).toMatchObject({
         divider: line,
         alphaBarStart: danger,
         alphaBarMiddle: line,
         betaBarStart: normal,
         betaBarEnd: line,
       });
-      await expect.poll(() => file().limitStyle).toBe('Bars');
       expect(hub.requests.length).toBe(requests);
       expect(hub.streams()).toBe(1);
     });

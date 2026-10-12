@@ -63,9 +63,15 @@ test('TURZXへ送る画像だけを一定時間ごとに少しずつずらす', 
     await test.step('手順1', async () => {
       // The positions go round the eight points in order, and back to the first.
       frames = [];
-      await expect.poll(() => frames.length, { timeout: 30_000 }).toBeGreaterThanOrEqual(14);
-      const taken = frames.slice(0, 40);
-      const measured = await measure(page, taken);
+      const taken: Frame[] = [];
+      const measured: Awaited<ReturnType<typeof measure>> = [];
+      // Timed redraws can repeat a position, so a frame count does not guarantee a full cycle.
+      await expect.poll(async () => {
+        const next = frames.slice(taken.length);
+        taken.push(...next);
+        measured.push(...await measure(page, next));
+        return walk(measured.map(m => m.shift)).length;
+      }, { timeout: 30_000, intervals: [1_000] }).toBeGreaterThanOrEqual(steps.length + 1);
       const shifts = measured.map(m => m.shift);
       expect(follows(shifts, indexOf(shifts[0]))).toBe(true);
       expect(new Set(shifts.map(s => s.join())).size).toBe(8);
