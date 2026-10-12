@@ -209,6 +209,14 @@ test('表示する枠を契約と枠で選ぶと、保存してプレビュー�
       await expect(sw('alpha Pro 5-hour')).toHaveAttribute('aria-checked', 'false');
       copyFileSync(join(dataDir, 'settings.good'), settingsFile);
       await page.reload();
+      // The cached list can appear before rendering resumes after reload. A missed frame waits
+      // up to 10s; wait for the next completed frame before sending another Hub update.
+      await page.waitForResponse(response => {
+        if (response.url() !== `${server.url}/wails/runtime` || !response.ok()) return false;
+        const call = response.request().postDataJSON().args;
+        return call?.methodName === 'token-monitor-turzx/internal/display.Service.CompleteFrame'
+          && Boolean(call.args[1] && call.args[2]) && call.args[3] === '';
+      }, { timeout: 20_000 });
       await expect(sw('alpha Pro 5-hour')).toHaveAttribute('aria-checked', 'false');
       expect(file().hiddenLimits).toEqual([alphaSession]);
 
