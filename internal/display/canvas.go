@@ -19,9 +19,14 @@ const RenderRequested = "display:render-requested"
 
 // FrameRequest is an immutable snapshot for the resident WebView2 renderer.
 type FrameRequest struct {
-	ID    uint64    `json:"id"`
-	Theme string    `json:"theme"`
-	Data  ThemeData `json:"data"`
+	ID           uint64    `json:"id"`
+	Theme        string    `json:"theme"`
+	Data         ThemeData `json:"data"`
+	Width        int       `json:"width"`
+	Height       int       `json:"height"`
+	OutputFormat string    `json:"outputFormat"`
+	Reverse180   bool      `json:"reverse180"`
+	Generation   uint64    `json:"generation"`
 	// ShiftX and ShiftY move the image sent to the TURZX (not the PNG for the preview) by that many pixels.
 	ShiftX int `json:"shiftX"`
 	ShiftY int `json:"shiftY"`
@@ -29,8 +34,10 @@ type FrameRequest struct {
 
 // Frame contains two encodings of the same Canvas drawing.
 type Frame struct {
-	PNG  []byte
-	JPEG []byte
+	PNG          []byte
+	JPEG         []byte
+	DeviceImage  []byte
+	OutputFormat string
 	// Pages is how many pages the style has; the frame is one of them.
 	Pages int
 }
@@ -57,13 +64,27 @@ func NewCanvasRenderer(service *Service, emit func(string, any)) *CanvasRenderer
 }
 
 func (r *CanvasRenderer) Render(ctx context.Context, stats *usage.Stats, now time.Time, source string, style Style, page int) (Frame, error) {
+	data := themeData(stats, now, source, page)
+	pages := data.GaugePages
+	if style == Bars {
+		pages = data.BarPages
+	}
+	r.service.mu.Lock()
+	x, y := r.service.shiftX, r.service.shiftY
+	r.service.mu.Unlock()
+	return r.RenderPrepared(ctx, FrameRequest{Theme: strings.ToLower(string(style)), Data: data, Width: Width, Height: Height, OutputFormat: "jpeg", ShiftX: x, ShiftY: y}, pages)
+}
+
+// RenderPrepared shares the image boundary with the legacy display and style previews.
+func (r *CanvasRenderer) RenderPrepared(ctx context.Context, request FrameRequest, pages int) (Frame, error) {
 	waitCtx, cancel := context.WithTimeout(ctx, r.responseTimeout)
 	defer cancel()
 	s := r.service
 	s.mu.Lock()
 	s.nextFrame++
+	request.ID = s.nextFrame
 	pending := &pendingFrame{
-		request: FrameRequest{ID: s.nextFrame, Theme: strings.ToLower(string(style)), Data: themeData(stats, now, source, page), ShiftX: s.shiftX, ShiftY: s.shiftY},
+		request: request,
 		result:  make(chan frameResult, 1),
 	}
 	s.pending = pending
@@ -84,10 +105,7 @@ func (r *CanvasRenderer) Render(ctx context.Context, stats *usage.Stats, now tim
 		return Frame{}, fmt.Errorf("canvas rendering: response timed out: %w", waitCtx.Err())
 	case result := <-pending.result:
 		frame := result.frame
-		frame.Pages = pending.request.Data.GaugePages
-		if style == Bars {
-			frame.Pages = pending.request.Data.BarPages
-		}
+		frame.Pages = pages
 		return frame, result.err
 	}
 }
@@ -130,13 +148,32 @@ func (s *Service) CompleteFrame(id uint64, pngBase64, jpegBase64, renderError st
 	if pending == nil || pending.request.ID != id {
 		return nil
 	}
+	if s.Configuration != nil {
+		current, configErr := s.Configuration()
+		if configErr != nil || current.Generation != pending.request.Generation {
+			select {
+			case pending.result <- frameResult{err: fmt.Errorf("display configuration changed")}:
+			default:
+			}
+			return nil
+		}
+	}
 	var result frameResult
 	if renderError != "" {
 		result.err = fmt.Errorf("canvas rendering: %s", renderError)
 	} else {
-		result.frame.PNG, err = decodeFrame(pngBase64, "png", Width, Height)
+		request := pending.request
+		result.frame.PNG, err = decodeFrame(pngBase64, "png", request.Width, request.Height)
 		if err == nil {
-			result.frame.JPEG, err = decodeFrame(jpegBase64, "jpeg", Height, Width)
+			w, h := request.Width, request.Height
+			if request.OutputFormat == "jpeg" {
+				w, h = h, w
+			}
+			result.frame.DeviceImage, err = decodeFrame(jpegBase64, request.OutputFormat, w, h)
+			result.frame.OutputFormat = request.OutputFormat
+			if request.OutputFormat == "jpeg" {
+				result.frame.JPEG = result.frame.DeviceImage
+			}
 		}
 		result.err = err
 	}

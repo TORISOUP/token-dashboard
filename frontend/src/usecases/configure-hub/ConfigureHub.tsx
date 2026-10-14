@@ -1,9 +1,11 @@
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Alert, Badge, Button, Card, Group, NumberInput, PasswordInput, Select, Stack, Text, TextInput, Title } from '@mantine/core';
 import { SwitchButton } from '../../shared/SwitchButton';
 import { ErrorNotice } from '../../shared/ErrorNotice';
 import { automatic, useSettingsDraft } from './SettingsDraft';
+import { getSettings } from '../../features/settings/queries';
 import styles from './ConfigureHub.module.css';
 
 function Row({ title, hint, children }: { title: ReactNode; hint?: string; children: ReactNode }) {
@@ -54,8 +56,14 @@ export function ConnectionSettings() {
 // The style choice sits right of the Style title. It applies and saves at once.
 export function StyleSelect() {
   const draft = useSettingsDraft();
+  const settings = useQuery({ ...getSettings(), enabled: draft?.saved.specificationPreview === true && !draft.saving, refetchInterval: 2000, retry: false });
   if (!draft) return null;
-  return <Select w={160} aria-label="Display style" data={['Gauges', 'Bars']} value={draft.style} allowDeselect={false} error={draft.fields.limitStyle}
+  const themed = !!draft.saved.themes?.length;
+  const compatible = new Set(draft.saved.compatibleThemeIDs ?? []);
+  const choices = themed ? draft.saved.themes!.filter(theme => compatible.has(theme.id)).map(theme => ({ value: theme.id, label: theme.name })) : ['Gauges', 'Bars'];
+  const value = !themed || compatible.has(draft.style) ? draft.style : null;
+  return <Select w={themed ? 360 : 160} maw="100%" miw={0} disabled={draft.saving || settings.isError || choices.length === 0} aria-label="Display style" data={choices} value={value} allowDeselect={false} error={draft.fields.limitStyle}
+    placeholder={choices.length ? 'Select a compatible style' : 'No compatible styles'}
     onChange={value => { if (value) draft.setStyle(value); }} />;
 }
 
@@ -105,7 +113,8 @@ export function EditSettings() {
 
 export function StyleError() {
   const draft = useSettingsDraft();
-  return draft ? <ErrorNotice error={draft.errorFor('display')} /> : null;
+  const settings = useQuery(getSettings());
+  return draft ? <ErrorNotice error={draft.errorFor('display') ?? settings.error} /> : null;
 }
 
 export function DisplaySettings() {
@@ -117,9 +126,9 @@ export function DisplaySettings() {
     ...displays.map(d => ({ value: d.deviceID, label: d.connected ? d.name : `${d.name} (Disconnected)` })),
   ];
   return <Stack gap={4} align="flex-end">
-    <Group wrap="nowrap" gap="sm">
+    <Group wrap="wrap" gap="sm" maw="100%">
       <Title order={5}>Output</Title>
-      <Select w={280} aria-label="Output device" data={options} value={draft.display} allowDeselect={false} error={draft.fields.displayID}
+      <Select w={280} maw="100%" disabled={draft.saving} aria-label="Output device" data={options} value={draft.display} allowDeselect={false} error={draft.fields.displayID}
         onChange={value => { if (value) draft.setDisplay(value); }} />
     </Group>
     {displays.length === 0 && <Text size="xs" c="dimmed">No TURZX display is connected.</Text>}

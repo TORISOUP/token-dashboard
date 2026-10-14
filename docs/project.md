@@ -7,20 +7,20 @@
 | 項目 | 内容 |
 | --- | --- |
 | 解決する問題・達成したい結果 | ローカルまたは Token Monitor Hub から取得した AI ツールのトークン利用量・推定コストと利用枠の残量を、ブラウザーやアプリの画面を開かずに、PC に接続した TURZX の USB ディスプレイで常時確認できるようにする |
-| 利用者・利用場面 | 自分の Windows PC に TURZX 9.2インチを接続し、作業中に横目で利用状況を確認する |
-| 今回の対象 | ローカルと1つの Hub から取得元を選ぶ設定（既定はローカル）と、Hub 選択時のリアルタイム受信。TURZX への表示（Tokens の Today・Month・All のトークン数と推定コスト、Usage Limits）。サインイン時の自動起動とタスクトレイ常駐。接続中の TURZX 9.2インチから表示先を1台選ぶ設定（選んでいない場合は最初の1台）。プレビューと取得元の設定を1画面にまとめたウィンドウ。インストーラーによる導入。GitHub Releases を使った新版の確認と自動更新 |
-| 今回の対象外 | 複数 Hub の同時受信と合算。利用状況の保存と履歴。Hub への書き込み。端末別・モデル別などの内訳表示。TURZX 9.2インチ以外の機種と、複数台への同時表示。動画（H.264）の送信。WinUSB ドライバーの導入。Windows 以外の OS。インストーラーのコード署名（Authenticode） |
+| 利用者・利用場面 | 自分の Windows PC に対応するTURZXを接続し、作業中に横目で利用状況を確認する |
+| 今回の対象 | ローカルと1つの Hub から取得元を選ぶ設定（既定はローカル）と、Hub 選択時のリアルタイム受信。9.2インチへのTokensのToday・Month・Allのトークン数と推定コスト、Usage Limitsの表示。3.5インチへの[サービス別の表示](usecases/利用状況をUSBディスプレイに表示する/scenarios/3.5インチでサービスごとの利用枠を順番に表示する.md)。サインイン時の自動起動とタスクトレイ常駐。対応機器から表示先を1台選ぶ設定（選んでいない場合は最初の1台）と、適合するスタイルの手動選択。Display、Connection、Settingsに分けたウィンドウ。インストーラーによる導入。GitHub Releases を使った新版の確認と自動更新 |
+| 今回の対象外 | 複数 Hub の同時受信と合算。利用状況の保存と履歴。Hub への書き込み。端末別の内訳表示と、トークン数・コストのモデル別表示。対応する9.2インチ・3.5インチ以外の機種と、複数台への同時表示。動画（H.264）の送信。WinUSB ドライバーの導入。Windows 以外の OS。インストーラーのコード署名（Authenticode） |
 
 ## 2. 制約・品質要求・受け入れ条件
 
-- **動作環境**: Windows 11（x64）と WebView2 Runtime が必要です。表示先は TURZX 9.2インチ（USB `1CBE:0092`）で、WinUSB ドライバーが設定済みであることを前提にします。表示中はメーカーのソフトを終了しておきます。
+- **動作環境**: Windows 11（x64）と WebView2 Runtime が必要です。表示先はTURZX 9.2インチ（USB `1CBE:0092`、WinUSBドライバー設定済み）、または[対象シナリオ](usecases/利用状況をUSBディスプレイに表示する/scenarios/3.5インチでサービスごとの利用枠を順番に表示する.md#表示先と向き)のUSBシリアル機種です。表示中はメーカーのソフトを終了しておきます。
 - **受信**: Hub は1つだけです。`GET /api/stats/stream` に SSE で接続し、Bearer 認証と `x-token-monitor-stream: 2` を付けます。受信が止まったときは、待ち時間を1秒から倍にしながら（上限60秒）再接続を続けます。
 - **ローカル取得**: アプリに同梱する tokscale 4.17.0 の Windows 用実行ファイルから、この端末の Today・Month・All のトークン数と推定コスト、利用枠を取得します。起動時に取得し、その後は利用記録の変更、2分ごとの利用枠の取得、Cursor の同期（起動時に同期できた場合だけ）、日付・月の切り替わりを契機に取得し直します。取得に失敗しても前回の表示値を保ち、選択した取得元を維持します。tokscale の設定・解析キャッシュはアプリ専用のディレクトリに置きます。利用者による tokscale の別途インストールは不要です。
 - **保存しないもの**: 受信した利用状況はメモリにだけ持ち、ファイルや DB には保存しません。起動後に最初の snapshot を受信するまでは、利用状況の値を表示しません。
 - **保存するもの**: Hub の接続先 URL と認証トークンは1組にまとめ、Windows の DPAPI でユーザー単位に暗号化して、ユーザーごとの設定領域に保存します。認証トークンはログにも画面表示にも出しません。
-- **Usage Limits の表示**: Hub が報告した枠のうち、メーターを表示する指定（`showMeter`）が付いたものを、残量の割合が小さい枠を持つ契約から順に、表示領域に収まる件数だけ表示します。利用者が表示しないと選んだ枠（`Display` 画面の `Usage Limits`）は、報告されなかったものとして扱います。
+- **Usage Limits の表示**: 取得元が報告した枠のうち、メーターを表示する指定（`showMeter`）が付いたものを表示します。利用者が表示しないと選んだ枠（`Display`画面の`Usage Limits`）は、報告されなかったものとして扱います。表示対象の選び方、配置、巡回は[表示ユースケース](usecases/利用状況をUSBディスプレイに表示する/README.md)の各シナリオに従います。
 - **障害の独立**: 受信の失敗と USB の切断・抜き差しは、互いにもう一方を止めません。アプリ自体も終了しません。USB ディスプレイがつながったら、その時点の最新表示を送ります。
-- **表示の同一性**: USB ディスプレイとウィンドウのプレビューには同じ内容を表示します。
+- **表示の同一性**: [表示ユースケースの共通条件](usecases/利用状況をUSBディスプレイに表示する/README.md#共通の受け入れ条件)に従います。
 - **配布と更新**: インストーラーは NSIS で作り、Windows へのサインイン時の自動起動を登録します。公開する GitHub Releases に、インストーラーと、自作の Ed25519 鍵で署名した更新情報（`update.json`）を置きます。アプリは起動のたびに、起動処理とは別にバックグラウンドで新版を確認し、見つかった新版の取得と、更新情報の署名・インストーラーのハッシュの検証までを自動で行います。適用（インストールと再起動）は、利用者がタスクトレイまたはウィンドウから実行したときだけ行います。リリースはタグの push で CI（`.github/workflows/release.yml`）が作成します。署名用の秘密鍵はリポジトリの外で保管し、CI 用に GitHub の Secrets（`UPDATE_SIGNING_KEY`）に登録します。インストーラーにはコード署名をしないため、初回のインストールでは SmartScreen の警告が出ます。
 - **完了の条件**: 受け入れ条件は各シナリオに書きます。`node scripts/run.mjs verify` の合格を完了の条件とします。USB 実機への表示は、自動テストとは別に実機で確認します。
 
@@ -34,7 +34,7 @@
 | ユースケース | 主アクター | 目的 | 実装順序 | 実現パターン | モック適用 |
 | --- | --- | --- | --- | --- | --- |
 | [利用状況の取得元と表示先を設定する](usecases/利用状況の取得元と表示先を設定する/README.md) | 利用者 | 利用状況の取得元と、表示先の TURZX を設定する | 1 | [UCP-2](design/UCP-2.md) | 対象 |
-| [利用状況をUSBディスプレイに表示する](usecases/利用状況をUSBディスプレイに表示する/README.md) | 利用者 | 選択した取得元の最新のトークン数・推定コストと利用枠を、TURZX とプレビューに常時表示する | 2 | [UCP-1](design/UCP-1.md) | 対象 |
+| [利用状況をUSBディスプレイに表示する](usecases/利用状況をUSBディスプレイに表示する/README.md) | 利用者 | 選択した取得元の最新のトークン数・推定コストと利用枠を、TURZX とプレビューに常時表示する | 2 | [UCP-1](design/UCP-1.md)、[UCP-2](design/UCP-2.md) | 対象 |
 | [新版を確認してアプリを更新する](usecases/新版を確認してアプリを更新する/README.md) | 利用者 | 起動時にバックグラウンドで GitHub Releases の新版を検出し、利用者の確認後にアプリを更新する | 3 | [UCP-3](design/UCP-3.md) | 対象 |
 | [Style一覧を閲覧する](usecases/Style一覧を閲覧する/README.md) | 利用者 | アプリに定義された表示スタイルを、現在の表示を変えずに見比べる | 4 | [UCP-1](design/UCP-1.md) | 対象 |
 | [Styleを追加する](usecases/Styleを追加する/README.md) | テーマ作者 | 組み込み以外の表示スタイルを1つアプリの定義に加える | 5 | [UCP-1](design/UCP-1.md) | 対象 |
@@ -53,6 +53,7 @@
 - 認証は `Authorization: Bearer <secret>` ヘッダーで行います。
 - `GET /api/stats/stream` は SSE です。接続ごとに最初に全体状態の `snapshot` を送り、30秒ごとに `: hb` のコメント行を送ります。利用量・利用枠・期間の区切りなどが変わると全体状態の `stats` を送ります。要求ヘッダー `x-token-monitor-stream: 2` を付けた場合、時刻だけの変化は `limits.updatedAt` と端末ごとの時刻・鮮度切れだけを含む `freshness` で送ります。通知本文は `type`・`reason`・`stats`・`at` を持つ JSON です。
 - 全体状態の `stats.periods.today`・`month`・`allTime` は Hub 全体の集計値で、`totalTokens`（整数）と `costUsd`（数値）を持ちます。Hub は期間が終わった端末の `today`・`month` を自身の集計から除き、期間の区切りが変わると `stats` を送ります。
+- 同じ固定版の[API文書](https://github.com/Javis603/token-monitor/blob/cdab5686d2711efea2c961f26d1e2e8c3c211b40/docs/API.md)で、期間ごとの`clients`（ツールIDごとのトークン数）と`clientCosts`（推定コスト）を2026-10-14に確認しました。この確認は文書の型と契約を対象とし、利用者の実Hubがこれらを報告していることの実測ではありません。
 - 利用枠は `stats.limits.providers[]` にアカウントごとに並び、各要素が `provider`・`accountLabel`・`planLabel` と `windows[]` を持ちます。`windows[]` の各要素は `kind`（`session`・`daily`・`weekly`・`billing`）、`showMeter`、`remainingPercent`、`usedPercent`、`resetsAt`、`label` を持ちます。`showMeter` が偽の枠は残量の割合を表示に使いません。
 - 2026-09-27 に利用者の Hub へ接続し、最初の `snapshot` のキー名と型だけを確認しました（値は記録していません）。`periods` の3期間すべてに `totalTokens` と `costUsd` があり、`limits.providers` は21件、そのうち `showMeter` が真の枠を持つのは6件で、枠は合計14件でした。
 
@@ -60,6 +61,7 @@
 
 - 情報源は [junhoyeo/tokscale v4.17.0](https://github.com/junhoyeo/tokscale/tree/v4.17.0) です。Windows 用のネイティブ実行ファイルを同梱し、`clients --json`・`graph --no-spinner`・`usage --json`・`cursor sync --json` を呼び出します。
 - 2026-09-29 にこの PC で、`graph --no-spinner` の日別の `tokenBreakdown`（`input`・`output`・`cacheRead`・`cacheWrite`）と `totals.cost` から求めた Today・Month・All が、`--today --json`・`--month --json`・`--json` の合計と一致することを確認しました。日別の `totals.tokens` は reasoning を含むため使いません。`cursor sync --json` は失敗時も終了コード0で、`synced` と `error`（認証情報がなければ `Not authenticated`）で結果を返します。
+- v4.17.0の[JSON型定義](https://github.com/junhoyeo/tokscale/blob/v4.17.0/packages/frontend/src/lib/types.ts)で、日別の`clients[]`が`client`、`tokens`、`cost`を持つことを2026-10-14に確認しました。`tokens`は`input`、`output`、`cacheRead`、`cacheWrite`、`reasoning`を持ちます。サービス別の集計も同じ`graph`の内訳から求め、トークン数にreasoningを加えません。
 - 2026-09-27 にこの PC で v4.17.0 の JSON 出力を確認しました。期間集計は `totalInput`・`totalOutput`・`totalCacheRead`・`totalCacheWrite`・`totalCost` を持ち、利用枠はプロバイダーごとの `metrics` に `label`・`used_percent`・`remaining_percent`・`resets_at` を持ちました。
 
 ### TURZX 9.2インチ
@@ -108,6 +110,7 @@ mise を使う場合は、`mise install` で `mise.toml` の版のツールを�
 | --- | --- | --- |
 | 環境構築 | `node scripts/run.mjs setup` | Wails CLI を `.tools/` に導入し、Go と npm の依存（同梱用 tokscale を含む）、Go バインディング、ルートツリーを生成します |
 | 開発起動 | `node scripts/run.mjs dev` | 開発用の Vite はポート 9345 を使います（Wails の既定の 9245 は、ほかの Wails プロジェクトと重なりやすいため変えています）。アプリがタスクトレイに常駐します。ウィンドウは最初は表示せず、トレイのアイコンのクリックか、トレイのメニューの `Open` で開きます |
+| 3.5インチの仕様確認 | `node scripts/run.mjs preview:display` | 固定データとメモリ内設定を使う開発用サーバーを起動します。`http://127.0.0.1:9356/`をブラウザーで開きます。終了は起動したターミナルでCtrl+Cです |
 | 終了 | トレイのメニューの `Exit`、または起動したターミナルで Ctrl+C | `Exit` でアプリが終了します。`dev` では、変更を監視する `wails3 dev` と Vite が `Exit` の後も残るため、ターミナルで Ctrl+C を押して止めます。ウィンドウの閉じるボタンではウィンドウを隠すだけです |
 | 全体検証 | `node scripts/run.mjs verify` | 生成、型検査、Lint、単体テスト、Go のテストと vet、文書検査、E2E がすべて合格します。生成のあと、画面の検査と検証用サーバーのビルド、Go のテスト、vet、文書検査を並列に実行し、出力の各行に `[check:go]` のようにタスク名を付けます |
 | TURZX 実機の列挙 | `$env:TURZX_DEVICE_TEST='1'; go test -run TestListConnected -v ./internal/turzx` | 接続中の TURZX が `TURZX1.0 (633A6E01)` の形式の表示名で列挙されます。TURZX を接続した PC で手動で実行します |
@@ -116,6 +119,18 @@ mise を使う場合は、`mise install` で `mise.toml` の版のツールを�
 | Styleを追加する E2E | `$env:STYLE_E2E='1'; npm --prefix frontend run test:e2e -- --grep Styleを追加する` | 「Styleを追加する」の E2E が合格します。`bin\token-monitor-turzx.exe` の開発ビルドを、一時データフォルダーで起動し、フォルダー選択ダイアログを操作します。動いている Token Dashboard を止めてから手元で実行します。`verify` には含めません |
 | インストーラーの作成 | `node scripts/run.mjs package` | `bin\token-monitor-turzx-<版>-amd64-setup.exe` ができます。版は `build/app.json` の `version` です。リリースの版はタグで決まるため、`build/app.json` の `version` は上げません |
 | リリース | `mise run release:tag`（版を指定するときは `mise run release:tag 1.2.0`） | 最新のタグ（タグがなければ `build/app.json` の `version`）の patch を1つ上げた `v<版>` のタグを、指定したときはその版のタグを push します。コミットしていない変更がない状態で、`origin/main` に含まれるコミットで実行します。push したタグで CI が検証、インストーラーの作成、`update.json` の署名、GitHub Releases の最新リリースへの公開を行い、各 PC のアプリが次の起動時に新版として取得します |
+
+3.5インチの仕様確認では、Display上部の`Specification preview`表示でモックが有効なことを確認します。起動1秒後から2組の固定データを8秒ごとに切り替え、Tokensの値と契約の残量順を変えます。4種類の3.5インチ標準スタイル、反転、Service content、個別利用枠をDisplayで、CycleとCycle timeをSettingsで操作します。設定はメモリ内だけに保持し、再起動で初期値へ戻ります。USB通信、実Hub、ローカル取得、更新元へは接続しません。診断ログの保存先は既定でTEMP下の`token-dashboard-display-preview`です。ポートとデータディレクトリは`WAILS_SERVER_PORT`・`WAILS_DATA_DIR`で変更できます。実処理の起動は`preview:display`を終了して通常の`dev`を使います。既定ではモックを使わず、本番ビルドは`WAILS_DISPLAY_PREVIEW`を無視します。接続失敗からモックへ切り替わる経路はありません。
+
+候補の絞り込みを確認するときは、起動前に`WAILS_DISPLAY_PREVIEW_DEVICES`を次の値に設定します。未指定時は`both`です。確認後は環境変数を解除します。未知の値では起動を失敗させ、別の固定表へ切り替えません。
+
+| 値 | 機器の固定表と初期選択 |
+| --- | --- |
+| `both` | 3.5インチと9.2インチが接続中、3.5インチを明示選択 |
+| `none` | 接続機器なし、Automatic |
+| `disconnected-35` / `disconnected-92` | 指定機種の未接続選択を保持し、もう一方の機種が接続中 |
+| `unknown` | 識別できない保存済み機器を明示選択し、対応2機種が接続中 |
+| `automatic-cycle` | Automaticで、両機種、9.2インチのみ、接続なし、3.5インチのみの固定表を8秒ごとに巡回 |
 
 デスクトップ版のビルドとインストーラーの作成では、環境変数 `BUILD_APP_VERSION`・`BUILD_UPDATE_SOURCE`・`BUILD_UPDATE_PUBLIC_KEY` を指定すると、版番号・更新元・公開鍵を、`build/app.json` の代わりにその値にします（指定しない項目は `build/app.json` の値のまま）。値はビルド時に実行ファイルへ埋め込み、実行時の環境変数では変わりません。リリースの CI は `BUILD_APP_VERSION` だけをタグの版にし、更新の E2E は3つとも指定して、手元の更新元を使う版を作ります。
 

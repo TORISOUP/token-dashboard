@@ -1,13 +1,14 @@
 import { createContext, useContext, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { View } from '@bindings/token-monitor-turzx/internal/settings/models';
+import type { Presentation, ServiceContent } from '@bindings/token-monitor-turzx/internal/display/models';
 import { getSettings, useSaveSettings } from '../../features/settings/queries';
 import { ErrorNotice } from '../../shared/ErrorNotice';
 import { publicError } from '../../shared/errors';
 import { useDraftDirty } from '../../shared/ExitContext';
 
 type Scope = 'connection' | 'display';
-type DisplayChange = { display?: string; style?: string; cycle?: boolean; cycleSeconds?: number; awayMinutes?: number };
+type DisplayChange = { display?: string; style?: string; cycle?: boolean; cycleSeconds?: number; awayMinutes?: number; presentation?: Presentation };
 export const automatic = '__automatic__';
 
 function useDraft(saved: View) {
@@ -26,7 +27,7 @@ function useDraft(saved: View) {
     setDone(false);
     setFailed(null);
     try {
-      const view = await save.mutateAsync({ source, url, token, displayID: saved.displayID, limitStyle: saved.limitStyle, cycle: saved.cycle, cycleSeconds: saved.cycleSeconds, awayMinutes: saved.awayMinutes });
+      const view = await save.mutateAsync({ source, url, token, displayID: saved.displayID, limitStyle: saved.limitStyle, cycle: saved.cycle, cycleSeconds: saved.cycleSeconds, awayMinutes: saved.awayMinutes, presentation: saved.presentation });
       setSource(view.source || 'Local');
       setURL(view.url);
       setToken('');
@@ -44,8 +45,22 @@ function useDraft(saved: View) {
         limitStyle: change.style ?? saved.limitStyle,
         cycle: change.cycle ?? saved.cycle, cycleSeconds: change.cycleSeconds ?? saved.cycleSeconds,
         awayMinutes: change.awayMinutes ?? saved.awayMinutes,
+        presentation: change.presentation ?? saved.presentation,
       });
     } catch { setFailed('display'); } finally { setPending({}); }
+  }
+  function setPresentation(change: Partial<Presentation>) {
+    if (saved.presentation) void applyDisplay({ presentation: { ...structuredClone(saved.presentation), ...change } });
+  }
+  function setService(id: string, change: Partial<ServiceContent>) {
+    if (!saved.presentation) return;
+    const presentation = structuredClone(saved.presentation);
+    presentation.services ??= {};
+    const current = presentation.services[saved.source] ?? {};
+    const value = current[id] ?? { enabled: true, content: 'Both' };
+    current[id] = { ...value, ...change };
+    presentation.services[saved.source] = current;
+    void applyDisplay({ presentation });
   }
   return {
     saved, source, url, token, connectionDirty, done,
@@ -60,6 +75,8 @@ function useDraft(saved: View) {
     setCycle: (cycle: boolean) => void applyDisplay({ cycle }),
     setCycleSeconds: (cycleSeconds: number) => void applyDisplay({ cycleSeconds }),
     setAwayMinutes: (awayMinutes: number) => void applyDisplay({ awayMinutes }),
+    setPresentation, setService,
+    serviceLayout: saved.themes?.find(theme => theme.id === (pending.style ?? saved.limitStyle))?.dataLayout.startsWith('service-') ?? false,
     saving: save.isPending,
     errorFor: (scope: Scope) => failed === scope ? save.error : null,
     fields: save.error ? publicError(save.error).fieldErrors ?? {} : {},

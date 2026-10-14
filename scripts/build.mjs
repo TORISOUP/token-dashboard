@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { tmpdir } from 'node:os';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 process.chdir(root);
 const windows = process.platform === 'win32';
@@ -16,6 +17,7 @@ if (process.env.BUILD_APP_VERSION) app.version = process.env.BUILD_APP_VERSION;
 const arch = process.env.GOARCH || (process.arch === 'arm64' ? 'arm64' : 'amd64');
 const target = resolve('bin', app.executable);
 const server = resolve('bin', 'token-monitor-turzx-server' + (windows ? '.exe' : ''));
+const displayPreview = resolve('bin', 'token-monitor-turzx-display-preview' + (windows ? '.exe' : ''));
 function bundleTokscale() {
   if (!windows) return;
   const platform = arch === 'amd64' ? 'x64' : 'arm64';
@@ -53,6 +55,10 @@ try {
   } else if (command === 'server') {
     bundleTokscale();
     run('go', ['build', '-trimpath', '-tags', 'server,production', '-o', server, '.'], { env: { ...process.env, CGO_ENABLED: '0' } });
+  } else if (command === 'display-preview') {
+    run('go', ['build', '-trimpath', '-tags', 'server', '-o', displayPreview, '.'], { env: { ...process.env, CGO_ENABLED: '0' } });
+  } else if (command === 'run-display-preview') {
+    run(displayPreview, [], { env: { ...process.env, WAILS_DISPLAY_PREVIEW: '1', WAILS_SERVER_PORT: process.env.WAILS_SERVER_PORT || '9356', WAILS_DATA_DIR: process.env.WAILS_DATA_DIR || resolve(tmpdir(), 'token-dashboard-display-preview') } });
   } else if (command === 'run' || command === 'run-server') {
     run(command === 'run' ? target : server, []);
   } else if (command === 'package') {

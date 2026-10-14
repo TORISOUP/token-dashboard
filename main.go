@@ -40,6 +40,9 @@ var webAssets embed.FS
 //go:embed build/app.json
 var configJSON []byte
 
+//go:embed themes/*/theme.json themes/services/*/theme.json
+var themeManifests embed.FS
+
 // Fixed at build time through -ldflags -X (see scripts/build.mjs): the release CI sets
 // the version from the tag, and the desktop E2E also sets a local update source.
 // An empty value keeps the one in build/app.json.
@@ -62,6 +65,7 @@ func main() {
 	}
 }
 func run() error {
+	specificationPreview := !production && os.Getenv("WAILS_DISPLAY_PREVIEW") == "1"
 	var cfg appConfig
 	if err := json.Unmarshal(configJSON, &cfg); err != nil {
 		return err
@@ -134,6 +138,10 @@ func run() error {
 		Show:       func(keys []string, shown bool) error { return settings.SetLimitsShown(settingsService, keys, shown) },
 		ShiftEvery: shiftInterval()}
 	renderer := display.NewCanvasRenderer(displayService, emit)
+	displayService.Themes, err = display.ReadThemes(themeManifests)
+	if err != nil {
+		return err
+	}
 	output := display.NewOutput(func() (string, error) { return settings.DisplayTarget(settingsService) }, logger)
 	ctx, stop := context.WithCancel(context.Background())
 	defer stop()
@@ -145,7 +153,7 @@ func run() error {
 		ShouldQuit:   controls.ShouldQuit,
 		OnShutdown: func() {
 			stop()
-			if !serverMode {
+			if !serverMode && !specificationPreview {
 				output.Wait()
 			}
 		},
@@ -169,7 +177,7 @@ func run() error {
 	}
 	app = application.New(options)
 	sink := func([]byte) {}
-	if !serverMode {
+	if !serverMode && !specificationPreview {
 		go output.Run(ctx)
 		sink = output.Submit
 	}
@@ -180,8 +188,9 @@ func run() error {
 	if serverMode {
 		idleAfter = func() int { return math.MaxInt32 }
 	}
-	go presence.Watch(ctx, conditions, idleAfter)
-	go display.Run(ctx, displayService, renderer, usageState, redrawInterval(), func() display.Style { return display.ParseStyle(settings.LimitStyle(settingsService)) }, sink, emit, logger)
+	if !specificationPreview {
+		go presence.Watch(ctx, conditions, idleAfter)
+	}
 	sourceChanged := make(chan struct{}, 1)
 	settingsService.OnSaved = func() {
 		select {
@@ -189,7 +198,14 @@ func run() error {
 		default:
 		}
 	}
-	go runUsageSource(ctx, settingsService, usageState, logger, sourceChanged, dir)
+	if specificationPreview {
+		if err := composeDisplayPreview(ctx, settingsService, displayService, usageState, renderer, emit); err != nil {
+			return err
+		}
+	} else {
+		go display.Run(ctx, displayService, renderer, usageState, redrawInterval(), func() display.Style { return display.ParseStyle(settings.LimitStyle(settingsService)) }, sink, emit, logger)
+		go runUsageSource(ctx, settingsService, usageState, logger, sourceChanged, dir)
+	}
 	updateReady := func(string) {}
 	if !serverMode {
 		// The app lives in the task tray. Closing the window only hides it.
@@ -248,14 +264,16 @@ func run() error {
 		})
 		updateReady = func(version string) { setUpdate("Update and restart (v" + version + ")") }
 	}
-	if serverMode {
-		// Server mode has no tray and never emits ApplicationStarted.
-		go updates.Run(ctx, updateService, updateReady)
-	} else {
-		// The tray menu can be rebuilt only once the application is running.
-		app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
+	if !specificationPreview {
+		if serverMode {
+			// Server mode has no tray and never emits ApplicationStarted.
 			go updates.Run(ctx, updateService, updateReady)
-		})
+		} else {
+			// The tray menu can be rebuilt only once the application is running.
+			app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
+				go updates.Run(ctx, updateService, updateReady)
+			})
+		}
 	}
 	return app.Run()
 }

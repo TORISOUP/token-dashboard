@@ -8,7 +8,7 @@ export type StyleDefinition = { id: string; name: string };
 
 type Manifest = { id?: string; name?: string };
 
-const manifests = import.meta.glob<Manifest>('../../../../themes/*/theme.json', { eager: true, import: 'default' });
+const manifests = import.meta.glob<Manifest>(['../../../../themes/*/theme.json', '../../../../themes/services/*/theme.json'], { eager: true, import: 'default' });
 const invalid = { code: 'INVALID', message: 'This folder is not a valid style.' };
 
 function definitions(value: unknown): StyleDefinition[] {
@@ -26,7 +26,7 @@ function definitions(value: unknown): StyleDefinition[] {
   return list;
 }
 
-function compiledStyles(): StyleDefinition[] {
+export function compiledStyles(): StyleDefinition[] {
   return definitions(Object.values(manifests));
 }
 

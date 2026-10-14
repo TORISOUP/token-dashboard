@@ -26,7 +26,9 @@ type Service struct {
 	// each page stays.
 	Cycle func() (on bool, every time.Duration)
 	// ShiftEvery is how long the image for the TURZX stays at one offset; zero means 3 minutes.
-	ShiftEvery time.Duration
+	ShiftEvery    time.Duration
+	Themes        map[string]Theme
+	Configuration func() (Configuration, error)
 
 	mu        sync.Mutex
 	preview   string
