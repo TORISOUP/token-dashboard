@@ -39,19 +39,18 @@ type View struct {
 	// DisplayID is empty when the first connected display is used automatically.
 	DisplayID string    `json:"displayID"`
 	Displays  []Display `json:"displays"`
-	// LimitStyle is how Usage Limits are drawn: Gauges or Bars.
+	// LimitStyle is the selected style ID.
 	LimitStyle string `json:"limitStyle"`
 	// Cycle shows the contracts that do not fit the first page in turn, each page for CycleSeconds.
 	Cycle        bool `json:"cycle"`
 	CycleSeconds int  `json:"cycleSeconds"`
 	// AwayMinutes is how long without input counts as away from the PC.
-	AwayMinutes          int                   `json:"awayMinutes"`
-	Presentation         *display.Presentation `json:"presentation"`
-	Themes               []display.Theme       `json:"themes"`
-	CompatibleThemeIDs   []string              `json:"compatibleThemeIDs"`
-	SpecificationPreview bool                  `json:"specificationPreview"`
-	Generation           uint64                `json:"generation"`
-	OutputWarning        string                `json:"outputWarning"`
+	AwayMinutes        int                   `json:"awayMinutes"`
+	Presentation       *display.Presentation `json:"presentation"`
+	Themes             []display.Theme       `json:"themes"`
+	CompatibleThemeIDs []string              `json:"compatibleThemeIDs"`
+	Generation         uint64                `json:"generation"`
+	OutputWarning      string                `json:"outputWarning"`
 }
 
 // Bounds and default of the time without input that counts as away, in minutes.
@@ -90,7 +89,7 @@ type file struct {
 	Connection  string `json:"connection,omitempty"`
 	DisplayID   string `json:"displayID"`
 	DisplayName string `json:"displayName"`
-	// LimitStyle is Gauges or Bars; absent means Gauges.
+	// LimitStyle accepts existing Gauges/Bars values and style IDs.
 	LimitStyle string `json:"limitStyle,omitempty"`
 	// HiddenLimits are the keys of the windows that are not drawn; absent means all are drawn.
 	HiddenLimits []string `json:"hiddenLimits,omitempty"`
@@ -98,7 +97,8 @@ type file struct {
 	Cycle        bool `json:"cycle,omitempty"`
 	CycleSeconds int  `json:"cycleSeconds,omitempty"`
 	// AwayMinutes absent means DefaultAwayMinutes.
-	AwayMinutes int `json:"awayMinutes,omitempty"`
+	AwayMinutes  int                   `json:"awayMinutes,omitempty"`
+	Presentation *display.Presentation `json:"presentation,omitempty"`
 }
 
 type connection struct {
@@ -121,11 +121,8 @@ type Service struct {
 	// every second.
 	awayKnown   bool
 	awayMinutes int
-	// The stage 2 composition uses the existing settings flow with memory in place of disk.
-	memory       *file
-	presentation *display.Presentation
-	themes       map[string]display.Theme
-	generation   uint64
+	themes      map[string]display.Theme
+	generation  uint64
 }
 
 func New(path, appID string, list func() ([]turzx.Device, error), logger *slog.Logger) *Service {
@@ -206,13 +203,11 @@ func (s *Service) Save(req SaveRequest) (view View, err error) {
 			fields["token"] = "The access token must not contain control characters."
 		}
 	}
-	if req.LimitStyle != "" && req.LimitStyle != "Gauges" && req.LimitStyle != "Bars" && (s.memory == nil || s.themes[req.LimitStyle].ID == "") {
+	if req.LimitStyle != "" && req.LimitStyle != "Gauges" && req.LimitStyle != "Bars" && s.themes[req.LimitStyle].ID == "" {
 		fields["limitStyle"] = "Choose Gauges or Bars."
 	}
 	if req.Presentation != nil {
-		if s.memory == nil {
-			fields["presentation"] = "Presentation storage is not connected."
-		} else if err := display.ValidatePresentation(req.Presentation); err != nil {
+		if err := display.ValidatePresentation(req.Presentation); err != nil {
 			fields["presentation"] = err.Error()
 		}
 	}
@@ -223,7 +218,7 @@ func (s *Service) Save(req SaveRequest) (view View, err error) {
 		fields["awayMinutes"] = fmt.Sprintf("Enter %d to %d minutes.", MinAwayMinutes, MaxAwayMinutes)
 	}
 	next := file{Source: req.Source, Connection: saved.Connection, DisplayID: req.DisplayID, LimitStyle: saved.LimitStyle, HiddenLimits: saved.HiddenLimits,
-		Cycle: saved.Cycle, CycleSeconds: saved.CycleSeconds, AwayMinutes: saved.AwayMinutes}
+		Cycle: saved.Cycle, CycleSeconds: saved.CycleSeconds, AwayMinutes: saved.AwayMinutes, Presentation: display.ClonePresentation(saved.Presentation)}
 	if req.AwayMinutes != 0 {
 		next.AwayMinutes = req.AwayMinutes
 	}
@@ -234,7 +229,11 @@ func (s *Service) Save(req SaveRequest) (view View, err error) {
 		next.CycleSeconds = req.CycleSeconds
 	}
 	if req.LimitStyle != "" {
-		next.LimitStyle = req.LimitStyle
+		if s.themes == nil {
+			next.LimitStyle = req.LimitStyle
+		} else if themeID(req.LimitStyle) != themeID(saved.LimitStyle) {
+			next.LimitStyle = themeID(req.LimitStyle)
+		}
 	}
 	if req.DisplayID != "" {
 		if i := slices.IndexFunc(devices, func(d turzx.Device) bool { return d.ID == req.DisplayID }); i >= 0 {
@@ -245,7 +244,7 @@ func (s *Service) Save(req SaveRequest) (view View, err error) {
 			fields["displayID"] = "The selected display is not available."
 		}
 	}
-	if s.memory != nil && req.LimitStyle != "" {
+	if s.themes != nil && req.LimitStyle != "" {
 		id := themeID(req.LimitStyle)
 		theme, exists := s.themes[id]
 		if !exists {
@@ -256,6 +255,9 @@ func (s *Service) Save(req SaveRequest) (view View, err error) {
 	}
 	if len(fields) > 0 {
 		return View{}, fault.Validation(fields)
+	}
+	if req.Presentation != nil {
+		next.Presentation = mergePresentation(saved.Presentation, req.Presentation)
 	}
 	if req.Source == "Hub" {
 		conn = connection{URL: origin, Token: token}
@@ -272,10 +274,8 @@ func (s *Service) Save(req SaveRequest) (view View, err error) {
 	if err := s.write(next); err != nil {
 		return View{}, err
 	}
-	presentationChanged := req.Presentation != nil && !reflect.DeepEqual(req.Presentation, s.presentation)
-	if req.Presentation != nil {
-		s.presentation = display.ClonePresentation(req.Presentation)
-	}
+	presentationChanged := !reflect.DeepEqual(next.Presentation, saved.Presentation)
+	s.generation++
 	s.awayKnown, s.awayMinutes = true, awayMinutesOf(next)
 	s.logger.Info("settings_saved")
 	// The source is read again only when the source or the connection changed. A new display or style
@@ -283,7 +283,7 @@ func (s *Service) Save(req SaveRequest) (view View, err error) {
 	if s.OnSaved != nil && (next.Source != saved.Source || (next.Source == "Hub" && conn != before)) {
 		s.OnSaved()
 	}
-	if (styleOf(next) != styleOf(saved) || next.Cycle != saved.Cycle || cycleSecondsOf(next) != cycleSecondsOf(saved) || (s.memory != nil && (themeID(next.LimitStyle) != themeID(saved.LimitStyle) || presentationChanged))) && s.OnDisplaySaved != nil {
+	if (styleOf(next) != styleOf(saved) || next.Cycle != saved.Cycle || cycleSecondsOf(next) != cycleSecondsOf(saved) || s.themes != nil && (themeID(next.LimitStyle) != themeID(saved.LimitStyle) || presentationChanged || next.DisplayID != saved.DisplayID)) && s.OnDisplaySaved != nil {
 		s.OnDisplaySaved()
 	}
 	return s.view(next, conn, devices), nil
@@ -294,11 +294,7 @@ func (s *Service) read() (file, connection, error) {
 	var conn connection
 	var data []byte
 	var err error
-	if s.memory != nil {
-		data, err = json.Marshal(s.memory)
-	} else {
-		data, err = os.ReadFile(s.path)
-	}
+	data, err = os.ReadFile(s.path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return file{Source: "Local"}, conn, nil
 	}
@@ -308,6 +304,11 @@ func (s *Service) read() (file, connection, error) {
 	unreadable := fault.New("SETTINGS_UNREADABLE", "The saved settings cannot be read. They may belong to another Windows user.")
 	if err := json.Unmarshal(data, &saved); err != nil {
 		return saved, conn, unreadable
+	}
+	if saved.Presentation != nil {
+		if err := display.ValidatePresentation(saved.Presentation); err != nil {
+			return saved, conn, unreadable
+		}
 	}
 	if saved.Source == "" {
 		saved.Source = "Local"
@@ -336,12 +337,6 @@ func (s *Service) read() (file, connection, error) {
 
 // write replaces the file only after the new content is fully on disk.
 func (s *Service) write(saved file) error {
-	if s.memory != nil {
-		saved.HiddenLimits = slices.Clone(saved.HiddenLimits)
-		*s.memory = saved
-		s.generation++
-		return nil
-	}
 	data, err := json.MarshalIndent(saved, "", "  ")
 	if err != nil {
 		return err
@@ -468,7 +463,11 @@ func SetLimitsShown(s *Service, keys []string, shown bool) error {
 		}
 	}
 	saved.HiddenLimits = slices.Sorted(maps.Keys(hidden))
-	return s.write(saved)
+	if err := s.write(saved); err != nil {
+		return err
+	}
+	s.generation++
+	return nil
 }
 
 // DisplayTarget returns the saved display, or the first connected one when Automatic ("" if none).

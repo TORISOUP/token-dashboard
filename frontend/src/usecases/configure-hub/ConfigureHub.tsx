@@ -56,7 +56,7 @@ export function ConnectionSettings() {
 // The style choice sits right of the Style title. It applies and saves at once.
 export function StyleSelect() {
   const draft = useSettingsDraft();
-  const settings = useQuery({ ...getSettings(), enabled: draft?.saved.specificationPreview === true && !draft.saving, refetchInterval: 2000, retry: false });
+  const settings = useQuery({ ...getSettings(), enabled: !!draft && !draft.saving, refetchInterval: 2000, retry: false });
   if (!draft) return null;
   const themed = !!draft.saved.themes?.length;
   const compatible = new Set(draft.saved.compatibleThemeIDs ?? []);

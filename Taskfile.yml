@@ -42,11 +42,6 @@ tasks:
     cmds:
       - task: build:server
       - node scripts/build.mjs run-server
-  preview:display:
-    cmds:
-      - task: frontend:build
-      - node scripts/build.mjs display-preview
-      - node scripts/build.mjs run-display-preview
   package:
     cmds:
       - task: build

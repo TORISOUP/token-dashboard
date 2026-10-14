@@ -229,9 +229,9 @@ func TestCanvasRejectsInvalidImageDimensions(t *testing.T) {
 
 func TestOutputKeepsTheNewestEncodedJPEG(t *testing.T) {
 	o := NewOutput(nil, nil)
-	o.Submit([]byte("first"))
-	o.Submit([]byte("latest"))
-	if got := string(<-o.pending); got != "latest" || len(o.pending) != 0 {
+	o.Submit(Frame{DeviceImage: []byte("first")})
+	o.Submit(Frame{DeviceImage: []byte("latest")})
+	if got := string((<-o.pending).DeviceImage); got != "latest" || len(o.pending) != 0 {
 		t.Fatalf("pending image: %q", got)
 	}
 }

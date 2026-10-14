@@ -216,7 +216,7 @@ test('実描画のJPEGがPNGと時計回り90度で対応し、描画要求の�
     await expect.poll(() => injected).toBe(true);
     const previous = await preview(page);
     await page.getByRole('textbox', { name: 'Display style' }).click();
-    await page.getByRole('option', { name: 'Bars' }).click();
+    await page.getByRole('option', { name: 'Bars', exact: true }).click();
     expect(await preview(page)).toBe(previous);
     failRequest = false;
     await expect.poll(async () => (await colours(page, await preview(page))).divider, { timeout: 20_000 }).toEqual(line);
@@ -278,9 +278,9 @@ test('Display style を Bars に切り替えると、保存して Tokens の列�
       // The choice is applied at once: no Save button, no message, and the Hub is not interrupted.
       await expect(page.getByRole('button', { name: 'Save' })).toHaveCount(0);
       await style().click();
-      await page.getByRole('option', { name: 'Bars' }).click();
+      await page.getByRole('option', { name: 'Bars', exact: true }).click();
       await expect(page.getByText('Saved.')).toHaveCount(0);
-      await expect.poll(() => file().limitStyle).toBe('Bars');
+      await expect.poll(() => file().limitStyle).toBe('bars');
       // A previous frame may still be in flight; the renderer allows up to 10s per frame.
       await expect.poll(async () => colours(page, await preview(page)), { timeout: 20_000 }).toMatchObject({
         divider: line,
@@ -313,9 +313,9 @@ test('Display style を Bars に切り替えると、保存して Tokens の列�
       expect((await colours(page, await preview(page))).alphaBarStart).toEqual(danger);
     });
     await test.step('受け入れ条件', async () => {
-      // Only Gauges and Bars can be chosen.
+      // Without a connected output, all built-in styles can be chosen.
       await style().click();
-      await expect(page.getByRole('option')).toHaveText(['Gauges', 'Bars']);
+      await expect(page.getByRole('option')).toHaveText(['Gauges', 'Bars', 'Bars 3.5" Landscape', 'Bars 3.5" Portrait', 'Gauges 3.5" Landscape', 'Gauges 3.5" Portrait']);
       await page.keyboard.press('Escape');
       // Remember this image to check that the next minute change redraws it without Hub input.
       const current = await preview(page);
@@ -343,9 +343,9 @@ test('Display style を Bars に切り替えると、保存して Tokens の列�
       expect(ordered.fourthColumnTop).toEqual(normal);
       // Choosing Gauges again saves it, draws the gauges and leaves the connection as it was.
       await style().click();
-      await page.getByRole('option', { name: 'Gauges' }).click();
+      await page.getByRole('option', { name: 'Gauges', exact: true }).click();
       await expect.poll(async () => (await colours(page, await preview(page))).firstColumnTop).not.toEqual(danger);
-      await expect.poll(() => file().limitStyle).toBe('Gauges');
+      await expect.poll(() => file().limitStyle).toBe('gauges');
       expect(file().source).toBe('Hub');
       expect(file().connection).toBeTruthy();
     });

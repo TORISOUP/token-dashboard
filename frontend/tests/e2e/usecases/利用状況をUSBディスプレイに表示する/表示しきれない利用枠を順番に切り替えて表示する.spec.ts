@@ -98,8 +98,8 @@ test('Cycle を入れると、表示しきれない契約をページとして C
       view = await context.newPage();
       await view.goto(server.url);
       await style().click();
-      await view.getByRole('option', { name: 'Bars' }).click();
-      await expect.poll(() => file().limitStyle).toBe('Bars');
+      await view.getByRole('option', { name: 'Bars', exact: true }).click();
+      await expect.poll(() => file().limitStyle).toBe('bars');
       await expect.poll(() => shown(view)).toEqual(danger);
     });
     await test.step('手順1', async () => {
@@ -139,7 +139,7 @@ test('Cycle を入れると、表示しきれない契約をページとして C
       await cycle().click();
       await expect(cycle()).toHaveAttribute('aria-checked', 'true');
       await expect.poll(() => file().cycle).toBe(true);
-      expect(file().limitStyle).toBe('Bars');
+      expect(file().limitStyle).toBe('bars');
       expect(file().source).toBe('Hub');
       expect(file().connection).toBeTruthy();
       await expect.poll(() => shown(view)).toEqual(danger);
@@ -216,8 +216,8 @@ test('Cycle を入れると、表示しきれない契約をページとして C
       // Gauges cycles too. With everything on one page nothing changes though Cycle is on, and the
       // other saved values stay as they were.
       await style().click();
-      await view.getByRole('option', { name: 'Gauges' }).click();
-      await expect.poll(() => file().limitStyle).toBe('Gauges');
+      await view.getByRole('option', { name: 'Gauges', exact: true }).click();
+      await expect.poll(() => file().limitStyle).toBe('gauges');
       expect(await changes(4_000)).toBeGreaterThanOrEqual(3);
       hub.send('stats', stats(3));
       await page.waitForTimeout(1_500);

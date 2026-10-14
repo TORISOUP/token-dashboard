@@ -55,7 +55,7 @@ test('Local と表示先を保存し、再起動後もローカルの利用状�
       // The image checks read the Bars layout (the divider after Tokens).
       await open('Display');
       await page.getByRole('textbox', { name: 'Display style' }).click();
-      await page.getByRole('option', { name: 'Bars' }).click();
+      await page.getByRole('option', { name: 'Bars', exact: true }).click();
       await open('Connection');
       await source.click();
       await page.getByRole('option', { name: 'Local' }).click();

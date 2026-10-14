@@ -186,14 +186,14 @@ test('表示する枠を契約と枠で選ぶと、保存してプレビュー�
     await test.step('受け入れ条件', async () => {
       // The same selection applies to Bars, and the Tokens column stays.
       await page.getByRole('textbox', { name: 'Display style' }).click();
-      await page.getByRole('option', { name: 'Bars' }).click();
-      await expect.poll(() => file().limitStyle).toBe('Bars');
+      await page.getByRole('option', { name: 'Bars', exact: true }).click();
+      await expect.poll(() => file().limitStyle).toBe('bars');
       await expect.poll(async () => colourCount(null, [0, 0, 350, 462])).toBeGreaterThan(drawn);
       await expect.poll(() => colourCount(danger)).toBeLessThan(drawn);
       expect(await colourCount(normal)).toBeGreaterThan(drawn);
       await page.getByRole('textbox', { name: 'Display style' }).click();
-      await page.getByRole('option', { name: 'Gauges' }).click();
-      await expect.poll(() => file().limitStyle).toBe('Gauges');
+      await page.getByRole('option', { name: 'Gauges', exact: true }).click();
+      await expect.poll(() => file().limitStyle).toBe('gauges');
 
       // A selection that cannot be saved leaves the list as it was and shows the error.
       copyFileSync(settingsFile, join(dataDir, 'settings.good'));
@@ -248,7 +248,7 @@ test('表示する枠を契約と枠で選ぶと、保存してプレビュー�
       expect(file().source).toBe('Hub');
       expect(file().connection).toBeTruthy();
       expect(file().displayID).toBe('');
-      expect(file().limitStyle).toBe('Gauges');
+      expect(file().limitStyle).toBe('gauges');
       expect(hub.streams()).toBe(1);
       await expect(page.getByText(token)).toHaveCount(0);
     });

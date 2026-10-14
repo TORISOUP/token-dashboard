@@ -11,7 +11,6 @@ export function PresentationNotice() {
   const draft = useSettingsDraft();
   if (!draft) return null;
   return <>
-    {draft.saved.specificationPreview && <Alert color="violet">Specification preview: fixed data, settings kept in memory, USB output disabled.</Alert>}
     {draft.saved.outputWarning && <Alert color="yellow">{draft.saved.outputWarning}</Alert>}
   </>;
 }
@@ -27,7 +26,7 @@ export function ServiceContent() {
     <Stack gap="md">
       <Group gap="xl">
         <Group gap="sm"><Text size="sm">Rotate 180°</Text><SwitchButton role="switch" label="Rotate 180°" checked={presentation.reverse180 ? 'true' : 'false'} disabled={draft.saving} onClick={() => draft.setPresentation({ reverse180: !presentation.reverse180 })} /></Group>
-        <Group gap="sm"><Text size="sm">Skip full 5h services</Text><SwitchButton role="switch" label="Skip full 5h services" checked={presentation.skipFull5h ? 'true' : 'false'} disabled={draft.saving} onClick={() => draft.setPresentation({ skipFull5h: !presentation.skipFull5h })} /></Group>
+        <Group gap="sm"><Text size="sm">Skip full 5h or missing limits</Text><SwitchButton role="switch" label="Skip full 5h or missing limits" checked={presentation.skipFull5h ? 'true' : 'false'} disabled={draft.saving} onClick={() => draft.setPresentation({ skipFull5h: !presentation.skipFull5h })} /></Group>
       </Group>
       <ErrorNotice error={services.error} />
       <details>

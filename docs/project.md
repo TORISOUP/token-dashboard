@@ -110,7 +110,6 @@ mise を使う場合は、`mise install` で `mise.toml` の版のツールを�
 | --- | --- | --- |
 | 環境構築 | `node scripts/run.mjs setup` | Wails CLI を `.tools/` に導入し、Go と npm の依存（同梱用 tokscale を含む）、Go バインディング、ルートツリーを生成します |
 | 開発起動 | `node scripts/run.mjs dev` | 開発用の Vite はポート 9345 を使います（Wails の既定の 9245 は、ほかの Wails プロジェクトと重なりやすいため変えています）。アプリがタスクトレイに常駐します。ウィンドウは最初は表示せず、トレイのアイコンのクリックか、トレイのメニューの `Open` で開きます |
-| 3.5インチの仕様確認 | `node scripts/run.mjs preview:display` | 固定データとメモリ内設定を使う開発用サーバーを起動します。`http://127.0.0.1:9356/`をブラウザーで開きます。終了は起動したターミナルでCtrl+Cです |
 | 終了 | トレイのメニューの `Exit`、または起動したターミナルで Ctrl+C | `Exit` でアプリが終了します。`dev` では、変更を監視する `wails3 dev` と Vite が `Exit` の後も残るため、ターミナルで Ctrl+C を押して止めます。ウィンドウの閉じるボタンではウィンドウを隠すだけです |
 | 全体検証 | `node scripts/run.mjs verify` | 生成、型検査、Lint、単体テスト、Go のテストと vet、文書検査、E2E がすべて合格します。生成のあと、画面の検査と検証用サーバーのビルド、Go のテスト、vet、文書検査を並列に実行し、出力の各行に `[check:go]` のようにタスク名を付けます |
 | TURZX 実機の列挙 | `$env:TURZX_DEVICE_TEST='1'; go test -run TestListConnected -v ./internal/turzx` | 接続中の TURZX が `TURZX1.0 (633A6E01)` の形式の表示名で列挙されます。TURZX を接続した PC で手動で実行します |
@@ -120,17 +119,7 @@ mise を使う場合は、`mise install` で `mise.toml` の版のツールを�
 | インストーラーの作成 | `node scripts/run.mjs package` | `bin\token-monitor-turzx-<版>-amd64-setup.exe` ができます。版は `build/app.json` の `version` です。リリースの版はタグで決まるため、`build/app.json` の `version` は上げません |
 | リリース | `mise run release:tag`（版を指定するときは `mise run release:tag 1.2.0`） | 最新のタグ（タグがなければ `build/app.json` の `version`）の patch を1つ上げた `v<版>` のタグを、指定したときはその版のタグを push します。コミットしていない変更がない状態で、`origin/main` に含まれるコミットで実行します。push したタグで CI が検証、インストーラーの作成、`update.json` の署名、GitHub Releases の最新リリースへの公開を行い、各 PC のアプリが次の起動時に新版として取得します |
 
-3.5インチの仕様確認では、Display上部の`Specification preview`表示でモックが有効なことを確認します。起動1秒後から2組の固定データを8秒ごとに切り替え、Tokensの値と契約の残量順を変えます。4種類の3.5インチ標準スタイル、反転、Service content、個別利用枠をDisplayで、CycleとCycle timeをSettingsで操作します。設定はメモリ内だけに保持し、再起動で初期値へ戻ります。USB通信、実Hub、ローカル取得、更新元へは接続しません。診断ログの保存先は既定でTEMP下の`token-dashboard-display-preview`です。ポートとデータディレクトリは`WAILS_SERVER_PORT`・`WAILS_DATA_DIR`で変更できます。実処理の起動は`preview:display`を終了して通常の`dev`を使います。既定ではモックを使わず、本番ビルドは`WAILS_DISPLAY_PREVIEW`を無視します。接続失敗からモックへ切り替わる経路はありません。
-
-候補の絞り込みを確認するときは、起動前に`WAILS_DISPLAY_PREVIEW_DEVICES`を次の値に設定します。未指定時は`both`です。確認後は環境変数を解除します。未知の値では起動を失敗させ、別の固定表へ切り替えません。
-
-| 値 | 機器の固定表と初期選択 |
-| --- | --- |
-| `both` | 3.5インチと9.2インチが接続中、3.5インチを明示選択 |
-| `none` | 接続機器なし、Automatic |
-| `disconnected-35` / `disconnected-92` | 指定機種の未接続選択を保持し、もう一方の機種が接続中 |
-| `unknown` | 識別できない保存済み機器を明示選択し、対応2機種が接続中 |
-| `automatic-cycle` | Automaticで、両機種、9.2インチのみ、接続なし、3.5インチのみの固定表を8秒ごとに巡回 |
+3.5インチの実処理確認では、保存済みの実Hub接続設定を監査用ディレクトリへ複製し、`WAILS_DATA_DIR`に指定してデスクトップアプリを起動します。`Output`で対応機器を、`Style`で4種類の3.5インチ標準スタイルを手動で選択します。反転、Service content、個別枠、Cycleを操作し、実機と正立したプレビューを比較します。再起動後は設定が復元され、先頭ページから再開することを確認します。監査の自動操作は前述のPlaywright CLIでWebView2へ接続して行います。接続失敗でも実データ取得を維持し、固定データへの切り替えは行いません。仕様確認用の固定データ・メモリ設定の合成点は実処理経路から削除しています。
 
 デスクトップ版のビルドとインストーラーの作成では、環境変数 `BUILD_APP_VERSION`・`BUILD_UPDATE_SOURCE`・`BUILD_UPDATE_PUBLIC_KEY` を指定すると、版番号・更新元・公開鍵を、`build/app.json` の代わりにその値にします（指定しない項目は `build/app.json` の値のまま）。値はビルド時に実行ファイルへ埋め込み、実行時の環境変数では変わりません。リリースの CI は `BUILD_APP_VERSION` だけをタグの版にし、更新の E2E は3つとも指定して、手元の更新元を使う版を作ります。
 

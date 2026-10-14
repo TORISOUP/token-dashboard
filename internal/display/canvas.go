@@ -19,6 +19,7 @@ const RenderRequested = "display:render-requested"
 
 // FrameRequest is an immutable snapshot for the resident WebView2 renderer.
 type FrameRequest struct {
+	TargetID     string    `json:"targetID"`
 	ID           uint64    `json:"id"`
 	Theme        string    `json:"theme"`
 	Data         ThemeData `json:"data"`
@@ -34,6 +35,7 @@ type FrameRequest struct {
 
 // Frame contains two encodings of the same Canvas drawing.
 type Frame struct {
+	Request      FrameRequest
 	PNG          []byte
 	JPEG         []byte
 	DeviceImage  []byte
@@ -105,6 +107,7 @@ func (r *CanvasRenderer) RenderPrepared(ctx context.Context, request FrameReques
 		return Frame{}, fmt.Errorf("canvas rendering: response timed out: %w", waitCtx.Err())
 	case result := <-pending.result:
 		frame := result.frame
+		frame.Request = request
 		frame.Pages = pages
 		return frame, result.err
 	}
@@ -150,7 +153,7 @@ func (s *Service) CompleteFrame(id uint64, pngBase64, jpegBase64, renderError st
 	}
 	if s.Configuration != nil {
 		current, configErr := s.Configuration()
-		if configErr != nil || current.Generation != pending.request.Generation {
+		if configErr != nil || current.Generation != pending.request.Generation || current.TargetID != pending.request.TargetID {
 			select {
 			case pending.result <- frameResult{err: fmt.Errorf("display configuration changed")}:
 			default:

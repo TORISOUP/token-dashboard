@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"maps"
 	"strings"
+	"time"
 )
 
 // Theme describes the data and dimensions requested by a declarative style.
@@ -50,6 +51,21 @@ type ServiceContent struct {
 	Content string `json:"content"`
 }
 
+func (c *ServiceContent) UnmarshalJSON(data []byte) error {
+	var entry struct {
+		Enabled *bool   `json:"enabled"`
+		Content *string `json:"content"`
+	}
+	if err := json.Unmarshal(data, &entry); err != nil {
+		return err
+	}
+	if entry.Enabled == nil || entry.Content == nil {
+		return fmt.Errorf("service settings require enabled and content")
+	}
+	c.Enabled, c.Content = *entry.Enabled, *entry.Content
+	return nil
+}
+
 // Presentation is the runtime contract; its disk representation is agreed separately.
 type Presentation struct {
 	Reverse180 bool                                 `json:"reverse180"`
@@ -91,12 +107,15 @@ func (p Presentation) content(source, id string) ServiceContent {
 }
 
 type Configuration struct {
-	Theme        Theme
-	Presentation Presentation
-	Source       string
-	Cycle        bool
-	CycleSeconds int
-	Generation   uint64
+	TargetID        string
+	TargetConnected bool
+	CycleEvery      time.Duration
+	Theme           Theme
+	Presentation    Presentation
+	Source          string
+	Cycle           bool
+	CycleSeconds    int
+	Generation      uint64
 }
 
 func (t Theme) ServiceLayout() bool { return strings.HasPrefix(t.DataLayout, "service-") }

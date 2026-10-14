@@ -5,30 +5,63 @@ import (
 	"strings"
 
 	"token-monitor-turzx/internal/display"
+	"token-monitor-turzx/internal/fault"
 	"token-monitor-turzx/internal/turzx"
 )
 
-// UseMemory is called only by the explicit development composition. The file schema is unchanged.
-func UseMemory(s *Service, initial View, themes map[string]display.Theme, devices func() ([]turzx.Device, error)) {
-	s.memory = &file{Source: initial.Source, DisplayID: initial.DisplayID, LimitStyle: initial.LimitStyle, Cycle: initial.Cycle, CycleSeconds: initial.CycleSeconds, AwayMinutes: initial.AwayMinutes}
-	for _, device := range initial.Displays {
-		if device.DeviceID == initial.DisplayID {
-			s.memory.DisplayName = device.Name
+// ConfigureDisplay binds the available styles to the normal disk-backed settings service.
+func ConfigureDisplay(s *Service, themes map[string]display.Theme) {
+	s.themes, s.generation = themes, 1
+}
+
+func presentationOf(saved file) *display.Presentation {
+	if saved.Presentation == nil {
+		return &display.Presentation{Services: map[string]map[string]display.ServiceContent{}}
+	}
+	return display.ClonePresentation(saved.Presentation)
+}
+
+func mergePresentation(saved, requested *display.Presentation) *display.Presentation {
+	next := presentationOf(file{Presentation: saved})
+	next.Reverse180, next.SkipFull5h = requested.Reverse180, requested.SkipFull5h
+	for source, services := range requested.Services {
+		if next.Services[source] == nil {
+			next.Services[source] = map[string]display.ServiceContent{}
+		}
+		for id, value := range services {
+			next.Services[source][id] = value
 		}
 	}
-	s.presentation = display.ClonePresentation(initial.Presentation)
-	s.themes = themes
-	s.generation = 1
-	s.list = devices
+	return next
+}
+
+// DisplayConfiguration snapshots selection and current transport target under the settings lock.
+func DisplayConfiguration(s *Service) (display.Configuration, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	saved, _, err := s.read()
+	if err != nil {
+		return display.Configuration{}, err
+	}
+	devices, err := s.list()
+	if err != nil {
+		return display.Configuration{}, err
+	}
+	theme, exists := s.themes[themeID(saved.LimitStyle)]
+	if !exists {
+		return display.Configuration{}, fault.New("STYLE_UNAVAILABLE", "The selected style is unavailable.")
+	}
+	target := targetID(saved, devices)
+	connected := slices.ContainsFunc(devices, func(d turzx.Device) bool { return d.ID == target })
+	return display.Configuration{Theme: theme, Presentation: *presentationOf(saved), Source: saved.Source, Cycle: saved.Cycle, CycleSeconds: cycleSecondsOf(saved), Generation: s.generation, TargetID: target, TargetConnected: connected}, nil
 }
 
 func (s *Service) view(saved file, conn connection, devices []turzx.Device) View {
 	view := viewOf(saved, conn, devices)
-	if s.memory == nil {
+	if s.themes == nil {
 		return view
 	}
-	view.Presentation = display.ClonePresentation(s.presentation)
-	view.SpecificationPreview = true
+	view.Presentation = presentationOf(saved)
 	view.Generation = s.generation
 	view.LimitStyle = themeID(saved.LimitStyle)
 	for _, theme := range s.themes {

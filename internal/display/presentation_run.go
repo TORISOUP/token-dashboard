@@ -47,25 +47,52 @@ func (s *Service) ThemePreview(id string) (ThemeData, error) {
 	return data, nil
 }
 
-// RunPresentation owns page identity and deadlines independently of the view and renderer.
-// Its input is the runtime configuration; persistence and USB are connected in stage 4.
-func RunPresentation(ctx context.Context, s *Service, renderer *CanvasRenderer, redraw time.Duration, emit func(string, any)) {
+// RunPresentation shares one page scheduler and Canvas path for every selected style.
+func RunPresentation(ctx context.Context, s *Service, renderer *CanvasRenderer, redraw time.Duration, output func(Frame), emit func(string, any)) {
+	runPresentation(ctx, s, renderer, redraw, s.Configuration, output, emit)
+}
+
+func runPresentation(ctx context.Context, s *Service, renderer *CanvasRenderer, redraw time.Duration, configuration func() (Configuration, error), output func(Frame), emit func(string, any)) {
 	beat := time.NewTicker(redraw)
 	defer beat.Stop()
+	poll := time.NewTicker(2 * time.Second)
+	defer poll.Stop()
+	shifter := time.NewTicker(s.shiftEvery())
+	defer shifter.Stop()
+	step := 0
+	wasAway := false
 	var previous Configuration
 	var oldPages []ServicePage
 	page := 0
 	deadline := time.Now()
 	initialized := false
+	hadStats := false
 	for {
-		config, err := s.Configuration()
+		config, err := configuration()
 		if err != nil {
 			s.Logger.Error("display_configuration_failed", "cause", err)
-			return
+			select {
+			case <-ctx.Done():
+				return
+			case <-s.State.Changed():
+			case <-poll.C:
+			}
+			continue
 		}
 		now := time.Now()
+		large := config.Theme.Width == Width && config.Theme.Height == Height
+		away, awayChanged := s.awayState()
+		away = away && large // The 3.5-inch burn-in series is agreed separately.
 		stats, source := s.State.Snapshot()
-		config.Source = source
+		if config.Source != source {
+			select {
+			case <-ctx.Done():
+				return
+			case <-s.State.Changed():
+			case <-poll.C:
+			}
+			continue
+		}
 		hidden, err := s.hiddenSet()
 		if err != nil {
 			s.Logger.Warn("hidden_limits_unavailable", "cause", err)
@@ -76,7 +103,7 @@ func RunPresentation(ctx context.Context, s *Service, renderer *CanvasRenderer, 
 		if config.Theme.DataLayout == "bars" {
 			count = data.BarPages
 		}
-		reset := !initialized || config.Theme.ID != previous.Theme.ID || config.Source != previous.Source || config.Cycle != previous.Cycle || !reflect.DeepEqual(config.Presentation.Services, previous.Presentation.Services) || config.Presentation.SkipFull5h != previous.Presentation.SkipFull5h
+		reset := !initialized || stats != nil && !hadStats || (config.Theme.ID != previous.Theme.ID && (config.Theme.ServiceLayout() || previous.Theme.ServiceLayout())) || config.Source != previous.Source || config.Cycle != previous.Cycle || config.Theme.ServiceLayout() && (!reflect.DeepEqual(config.Presentation.Services, previous.Presentation.Services) || config.Presentation.SkipFull5h != previous.Presentation.SkipFull5h)
 		if config.Theme.ServiceLayout() {
 			var message string
 			pages, message = ServicePages(stats, now, config, hidden)
@@ -102,17 +129,20 @@ func RunPresentation(ctx context.Context, s *Service, renderer *CanvasRenderer, 
 				}
 			}
 		}
-		interval := time.Duration(config.CycleSeconds) * time.Second
+		interval := config.CycleEvery
+		if interval <= 0 {
+			interval = time.Duration(config.CycleSeconds) * time.Second
+		}
 		if interval <= 0 {
 			interval = 10 * time.Second
 		}
 		if reset || !config.Cycle || page >= count {
 			page = 0
 		}
-		if reset || config.CycleSeconds != previous.CycleSeconds {
+		if reset || config.CycleSeconds != previous.CycleSeconds || config.CycleEvery != previous.CycleEvery {
 			deadline = now.Add(interval)
 		}
-		if config.Cycle && count > 1 && !now.Before(deadline) {
+		if config.Cycle && count > 1 && !away && !wasAway && !now.Before(deadline) {
 			page = (page + 1) % count
 			deadline = now.Add(interval)
 		}
@@ -121,38 +151,71 @@ func RunPresentation(ctx context.Context, s *Service, renderer *CanvasRenderer, 
 		} else if !config.Theme.ServiceLayout() {
 			data = themeData(withoutHidden(stats, hidden), now, source, page)
 		}
-		request := FrameRequest{Theme: config.Theme.ID, Width: config.Theme.Width, Height: config.Theme.Height, Data: data, OutputFormat: "png", Reverse180: config.Presentation.Reverse180, Generation: config.Generation}
-		if !config.Theme.ServiceLayout() {
+		request := FrameRequest{TargetID: config.TargetID, Theme: config.Theme.ID, Width: config.Theme.Width, Height: config.Theme.Height, Data: data, OutputFormat: "png", Reverse180: config.Presentation.Reverse180, Generation: config.Generation}
+		if large {
 			request.OutputFormat = "jpeg"
 			request.Reverse180 = false
+			request.ShiftX, request.ShiftY = shiftSteps[step][0], shiftSteps[step][1]
 		}
-		frame, err := renderer.RenderPrepared(ctx, request, count)
+		if wasAway && !away {
+			step = 0
+			request.ShiftX, request.ShiftY = 0, 0
+		}
+		wasAway = away
+		var frame Frame
+		if away {
+			frame = Frame{Request: request, DeviceImage: black(), JPEG: black(), OutputFormat: "jpeg"}
+		} else {
+			frame, err = renderer.RenderPrepared(ctx, request, count)
+		}
 		if ctx.Err() != nil {
 			return
 		}
 		if err != nil {
 			s.Logger.Error("display_render_failed", "cause", err)
 		} else {
-			s.mu.Lock()
-			s.preview = "data:image/png;base64," + base64.StdEncoding.EncodeToString(frame.PNG)
-			s.mu.Unlock()
-			emit(Updated, nil)
+			output(frame)
+			if !away {
+				s.mu.Lock()
+				s.preview = "data:image/png;base64," + base64.StdEncoding.EncodeToString(frame.PNG)
+				s.mu.Unlock()
+				emit(Updated, nil)
+			}
 		}
 		previous = config
 		oldPages = pages
 		initialized = true
+		hadStats = stats != nil
 		delay := time.Hour
-		if config.Cycle && count > 1 {
+		if config.Cycle && count > 1 && !away {
 			delay = max(time.Millisecond, time.Until(deadline))
 		}
 		timer := time.NewTimer(delay)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return
-		case <-s.State.Changed():
-		case <-beat.C:
-		case <-timer.C:
+	wait:
+		for {
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return
+			case <-s.State.Changed():
+				break wait
+			case <-beat.C:
+				break wait
+			case <-timer.C:
+				break wait
+			case <-awayChanged:
+				break wait
+			case <-shifter.C:
+				if large && !away {
+					step = (step + 1) % len(shiftSteps)
+					break wait
+				}
+			case <-poll.C:
+				next, configErr := configuration()
+				if configErr != nil || next.Generation != config.Generation || next.TargetID != config.TargetID {
+					break wait
+				}
+			}
 		}
 		timer.Stop()
 	}

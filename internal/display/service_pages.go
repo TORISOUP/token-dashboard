@@ -168,7 +168,7 @@ func ServicePages(stats *usage.Stats, now time.Time, config Configuration, hidde
 				contracts = append(contracts, provider)
 			}
 		}
-		if config.Presentation.SkipFull5h && has5h && full {
+		if config.Presentation.SkipFull5h && (len(contracts) == 0 || has5h && full) {
 			continue
 		}
 		base := ServicePage{Provider: name, Icon: serviceIcon(name), Initial: string([]rune(name)[0]), Tokens: serviceTokens(stats, config.Source, name), Circles: []ThemeCircle{}, Windows: []ThemeWindow{}, ShowTokens: selection.Content != "Limits", ShowLimits: selection.Content != "Tokens", Both: selection.Content == "Both"}

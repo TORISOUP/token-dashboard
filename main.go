@@ -65,7 +65,6 @@ func main() {
 	}
 }
 func run() error {
-	specificationPreview := !production && os.Getenv("WAILS_DISPLAY_PREVIEW") == "1"
 	var cfg appConfig
 	if err := json.Unmarshal(configJSON, &cfg); err != nil {
 		return err
@@ -142,7 +141,14 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	output := display.NewOutput(func() (string, error) { return settings.DisplayTarget(settingsService) }, logger)
+	settings.ConfigureDisplay(settingsService, displayService.Themes)
+	displayService.Configuration = func() (display.Configuration, error) {
+		config, err := settings.DisplayConfiguration(settingsService)
+		config.CycleEvery = cycleEvery(config.CycleSeconds)
+		return config, err
+	}
+	output := display.NewOutput(displayService.Configuration, logger)
+	output.Redraw = usageState.Touch
 	ctx, stop := context.WithCancel(context.Background())
 	defer stop()
 	options := application.Options{
@@ -153,7 +159,7 @@ func run() error {
 		ShouldQuit:   controls.ShouldQuit,
 		OnShutdown: func() {
 			stop()
-			if !serverMode && !specificationPreview {
+			if !serverMode {
 				output.Wait()
 			}
 		},
@@ -176,8 +182,8 @@ func run() error {
 		}}
 	}
 	app = application.New(options)
-	sink := func([]byte) {}
-	if !serverMode && !specificationPreview {
+	sink := func(display.Frame) {}
+	if !serverMode {
 		go output.Run(ctx)
 		sink = output.Submit
 	}
@@ -188,9 +194,7 @@ func run() error {
 	if serverMode {
 		idleAfter = func() int { return math.MaxInt32 }
 	}
-	if !specificationPreview {
-		go presence.Watch(ctx, conditions, idleAfter)
-	}
+	go presence.Watch(ctx, conditions, idleAfter)
 	sourceChanged := make(chan struct{}, 1)
 	settingsService.OnSaved = func() {
 		select {
@@ -198,14 +202,8 @@ func run() error {
 		default:
 		}
 	}
-	if specificationPreview {
-		if err := composeDisplayPreview(ctx, settingsService, displayService, usageState, renderer, emit); err != nil {
-			return err
-		}
-	} else {
-		go display.Run(ctx, displayService, renderer, usageState, redrawInterval(), func() display.Style { return display.ParseStyle(settings.LimitStyle(settingsService)) }, sink, emit, logger)
-		go runUsageSource(ctx, settingsService, usageState, logger, sourceChanged, dir)
-	}
+	go display.RunPresentation(ctx, displayService, renderer, redrawInterval(), sink, emit)
+	go runUsageSource(ctx, settingsService, usageState, logger, sourceChanged, dir)
 	updateReady := func(string) {}
 	if !serverMode {
 		// The app lives in the task tray. Closing the window only hides it.
@@ -264,7 +262,7 @@ func run() error {
 		})
 		updateReady = func(version string) { setUpdate("Update and restart (v" + version + ")") }
 	}
-	if !specificationPreview {
+	{
 		if serverMode {
 			// Server mode has no tray and never emits ApplicationStarted.
 			go updates.Run(ctx, updateService, updateReady)
