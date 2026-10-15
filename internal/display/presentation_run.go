@@ -80,7 +80,6 @@ func runPresentation(ctx context.Context, s *Service, renderer *CanvasRenderer, 
 			continue
 		}
 		now := time.Now()
-		large := config.Theme.Width == Width && config.Theme.Height == Height
 		away, awayChanged := s.awayState()
 		count := 0
 		if away {
@@ -223,7 +222,7 @@ func runPresentation(ctx context.Context, s *Service, renderer *CanvasRenderer, 
 			case <-awayChanged:
 				break wait
 			case <-shifter.C:
-				if large && !away {
+				if !away {
 					step = (step + 1) % len(shiftSteps)
 					break wait
 				}
@@ -241,10 +240,10 @@ func runPresentation(ctx context.Context, s *Service, renderer *CanvasRenderer, 
 // presentationRequest uses the same metadata for normal and black device images.
 func presentationRequest(config Configuration, step int) FrameRequest {
 	request := FrameRequest{TargetID: config.TargetID, Theme: config.Theme.ID, Width: config.Theme.Width, Height: config.Theme.Height, OutputFormat: "png", Reverse180: config.Presentation.Reverse180, Generation: config.Generation}
+	request.ShiftX, request.ShiftY = shiftSteps[step][0], shiftSteps[step][1]
 	if config.Theme.Width == Width && config.Theme.Height == Height {
 		request.OutputFormat = "jpeg"
 		request.Reverse180 = false
-		request.ShiftX, request.ShiftY = shiftSteps[step][0], shiftSteps[step][1]
 	}
 	return request
 }
