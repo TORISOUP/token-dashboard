@@ -9,7 +9,8 @@ const dataDir = join(runDir, 'data');
 mkdirSync(join(dataDir, 'logs'), { recursive: true });
 const write = (name, value) => writeFileSync(join(dataDir, name), JSON.stringify(value));
 writeFileSync(join(dataDir, 'fake-tokscale'), '');
-write('settings.json', { source: 'Local', displayID: 'USB\\VID_1A86&PID_5722\\USB35INCHIPSV2', displayName: 'TURZX 3.5-inch', limitStyle: 'gauges-35-landscape', cycle: true, cycleSeconds: 5 });
+// The existing short-interval switch scales Cycle time by 0.1, so 50 means 5 seconds here.
+write('settings.json', { source: 'Local', displayID: 'USB\\VID_1A86&PID_5722\\USB35INCHIPSV2', displayName: 'TURZX 3.5-inch', limitStyle: 'gauges-35-landscape', cycle: true, cycleSeconds: 50 });
 const now = new Date();
 const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 write('graph.json', { summary: { clients: ['claude', 'codex'] }, contributions: [{ date, totals: { cost: 3 }, tokenBreakdown: { input: 3000 }, clients: [

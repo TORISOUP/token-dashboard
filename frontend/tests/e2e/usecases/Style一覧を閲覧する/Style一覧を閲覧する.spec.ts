@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { startServer } from '../../support/server';
+import { saveLargeDisplayFixture, startServer } from '../../support/server';
 import { startHub } from '../../support/hub';
 import { shortIntervals } from '../../support/local';
 
@@ -89,6 +89,7 @@ async function cards(page: Page) {
 test('定義された表示スタイルを、現在の表示を変えずに見比べる', async ({ page }) => {
   test.setTimeout(180_000);
   const dataDir = mkdtempSync(join(tmpdir(), 'turzx-styles-e2e-'));
+  saveLargeDisplayFixture(dataDir);
   const hub = await startHub();
   const server = await startServer(dataDir, 34130, shortIntervals);
   const file = () => JSON.parse(readFileSync(join(dataDir, 'settings.json'), 'utf8'));

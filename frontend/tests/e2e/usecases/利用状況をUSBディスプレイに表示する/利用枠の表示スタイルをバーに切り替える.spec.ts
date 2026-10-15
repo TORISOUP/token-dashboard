@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { startServer } from '../../support/server';
+import { saveLargeDisplayFixture, startServer } from '../../support/server';
 import { startHub } from '../../support/hub';
 import { shortIntervals } from '../../support/local';
 import { measure } from '../../support/shift';
@@ -156,6 +156,7 @@ test('実描画のJPEGがPNGと時計回り90度で対応し、描画要求の�
   test.setTimeout(90_000);
   const dataDir = mkdtempSync(join(tmpdir(), 'turzx-canvas-e2e-'));
   const hub = await startHub();
+  saveLargeDisplayFixture(dataDir);
   const server = await startServer(dataDir, 34129, shortIntervals);
   const frames = new Map<string, { png: string; jpeg: string }>();
   let assetsFailed = false;
@@ -234,6 +235,7 @@ test('Display style を Bars に切り替えると、保存して Tokens の列�
   const dataDir = mkdtempSync(join(tmpdir(), 'turzx-bars-e2e-'));
   const hub = await startHub();
   // The server redraws every second instead of every minute.
+  saveLargeDisplayFixture(dataDir);
   let server = await startServer(dataDir, 34123, shortIntervals);
   // The page is replaced after the window is closed, so the locator is made when it is used.
   const style = () => page.getByRole('textbox', { name: 'Display style' });
@@ -313,9 +315,9 @@ test('Display style を Bars に切り替えると、保存して Tokens の列�
       expect((await colours(page, await preview(page))).alphaBarStart).toEqual(danger);
     });
     await test.step('受け入れ条件', async () => {
-      // Without a connected output, all built-in styles can be chosen.
+      // The saved large output offers the two compatible large styles, even while disconnected.
       await style().click();
-      await expect(page.getByRole('option')).toHaveText(['Gauges', 'Bars', 'Bars 3.5" Landscape', 'Bars 3.5" Portrait', 'Gauges 3.5" Landscape', 'Gauges 3.5" Portrait']);
+      await expect(page.getByRole('option')).toHaveText(['Gauges', 'Bars']);
       await page.keyboard.press('Escape');
       // Remember this image to check that the next minute change redraws it without Hub input.
       const current = await preview(page);

@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { startServer } from '../../support/server';
+import { saveLargeDisplayFixture, startServer } from '../../support/server';
 import { localHome } from '../../support/local';
 
 // The server has no task tray or USB output. Opening the page stands in for opening
@@ -27,6 +27,7 @@ test('Local と表示先を保存し、再起動後もローカルの利用状�
   const dataDir = mkdtempSync(join(tmpdir(), 'turzx-local-settings-e2e-'));
   // tokscale reads an empty home folder, so the usage shown does not depend on this PC.
   const { home, env } = localHome();
+  saveLargeDisplayFixture(dataDir);
   let server = await startServer(dataDir, 34118, env);
   const source = page.getByRole('textbox', { name: 'Data source' });
   const device = page.getByRole('textbox', { name: 'Output device' });

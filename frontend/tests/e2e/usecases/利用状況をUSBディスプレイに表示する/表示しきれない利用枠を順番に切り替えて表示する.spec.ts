@@ -2,7 +2,7 @@ import { test, expect, type Locator, type Page } from '@playwright/test';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { startServer } from '../../support/server';
+import { saveLargeDisplayFixture, startServer } from '../../support/server';
 import { startHub } from '../../support/hub';
 import { shortIntervals } from '../../support/local';
 
@@ -52,6 +52,7 @@ test('Cycle を入れると、表示しきれない契約をページとして C
   let view: Page = page;
   test.setTimeout(240_000);
   const dataDir = mkdtempSync(join(tmpdir(), 'turzx-cycle-e2e-'));
+  saveLargeDisplayFixture(dataDir);
   const hub = await startHub();
   let server = await startServer(dataDir, 34140, shortIntervals);
   const style = () => view.getByRole('textbox', { name: 'Display style' });

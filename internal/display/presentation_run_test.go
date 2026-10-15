@@ -7,6 +7,7 @@ import (
 	"image"
 	"image/png"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -14,7 +15,7 @@ import (
 )
 
 // The real scheduler and Canvas boundary run together; only the browser's encoded pixels are supplied.
-func serviceRunner(t *testing.T, config Configuration) (*Service, chan FrameRequest, func(func(*Configuration))) {
+func serviceRunner(t *testing.T, config Configuration, delay ...func() time.Duration) (*Service, chan FrameRequest, func(func(*Configuration))) {
 	t.Helper()
 	s := canvasService()
 	s.State = usage.NewState()
@@ -27,13 +28,33 @@ func serviceRunner(t *testing.T, config Configuration) (*Service, chan FrameRequ
 		t.Fatal(err)
 	}
 	pixels := base64.StdEncoding.EncodeToString(encoded.Bytes())
+	ctx, cancel := context.WithCancel(context.Background())
+	var completions sync.WaitGroup
 	renderer := NewCanvasRenderer(s, func(string, any) {
 		r := s.RenderRequest()
-		if err := s.CompleteFrame(r.ID, pixels, pixels, ""); err != nil {
-			t.Errorf("Canvas completion: %v", err)
+		complete := func() {
+			if err := s.CompleteFrame(r.ID, pixels, pixels, ""); err != nil {
+				t.Errorf("Canvas completion: %v", err)
+			}
 		}
+		if len(delay) > 0 {
+			if wait := delay[0](); wait > 0 {
+				completions.Add(1)
+				go func() {
+					defer completions.Done()
+					timer := time.NewTimer(wait)
+					defer timer.Stop()
+					select {
+					case <-ctx.Done():
+					case <-timer.C:
+						complete()
+					}
+				}()
+				return
+			}
+		}
+		complete()
 	})
-	ctx, cancel := context.WithCancel(context.Background())
 	frames := make(chan FrameRequest, 64)
 	done := make(chan struct{})
 	go func() {
@@ -45,7 +66,7 @@ func serviceRunner(t *testing.T, config Configuration) (*Service, chan FrameRequ
 			}
 		}, func(string, any) {})
 	}()
-	t.Cleanup(func() { cancel(); <-done })
+	t.Cleanup(func() { cancel(); <-done; completions.Wait() })
 	change := func(edit func(*Configuration)) { mu.Lock(); edit(&config); mu.Unlock(); s.State.Touch() }
 	return s, frames, change
 }
@@ -101,6 +122,75 @@ func TestServiceUpdatesDoNotPostponeTheCycleDeadline(t *testing.T) {
 	nextServiceFrame(t, frames, func(f FrameRequest) bool { return f.Data.Service != nil && f.Data.Service.Provider == "B" })
 	cancel()
 	<-updated
+}
+
+func TestServiceAwayRetainsPageAndRestartsTheFullInterval(t *testing.T) {
+	for _, removed := range []bool{false, true} {
+		name := "retained"
+		if removed {
+			name = "removed"
+		}
+		t.Run(name, func(t *testing.T) {
+			config := serviceConfig()
+			config.Cycle, config.CycleEvery = true, 250*time.Millisecond
+			s, frames, _ := serviceRunner(t, config)
+			s.State.Set(scheduledServices("A", "B", "C"))
+			nextServiceFrame(t, frames, func(f FrameRequest) bool { return f.Data.Service != nil && f.Data.Service.Provider == "B" })
+			SetAway(s, true)
+			nextServiceFrame(t, frames, func(f FrameRequest) bool { return f.Data.Service == nil })
+			updated := scheduledServices("C", "A", "B")
+			want := "B"
+			if removed {
+				updated, want = scheduledServices("A", "C"), "C"
+			}
+			s.State.Set(updated)
+			nextServiceFrame(t, frames, func(f FrameRequest) bool { return f.Data.Service == nil })
+			SetAway(s, false)
+			first := nextServiceFrame(t, frames, func(f FrameRequest) bool { return f.Data.Service != nil })
+			if first.Data.Service.Provider != want {
+				t.Fatalf("returned to %s, want %s", first.Data.Service.Provider, want)
+			}
+			s.State.Touch()
+			redraw := nextServiceFrame(t, frames, func(f FrameRequest) bool { return f.Data.Service != nil })
+			if redraw.Data.Service.Provider != want {
+				t.Fatal("a data update advanced the resumed page")
+			}
+			select {
+			case frame := <-frames:
+				t.Fatalf("resumed page advanced before a full interval: %+v", frame.Data.Service)
+			case <-time.After(100 * time.Millisecond):
+			}
+			nextServiceFrame(t, frames, func(f FrameRequest) bool { return f.Data.Service != nil && f.Data.Service.Provider != want })
+		})
+	}
+}
+
+func TestResumeIntervalStartsAfterSlowCanvasCompletes(t *testing.T) {
+	config := serviceConfig()
+	config.Cycle, config.CycleEvery = true, 200*time.Millisecond
+	var slowNext atomic.Bool
+	s, frames, _ := serviceRunner(t, config, func() time.Duration {
+		if slowNext.Swap(false) {
+			return 300 * time.Millisecond
+		}
+		return 0
+	})
+	s.State.Set(scheduledServices("A", "B"))
+	nextServiceFrame(t, frames, func(f FrameRequest) bool { return f.Data.Service != nil && f.Data.Service.Provider == "A" })
+	SetAway(s, true)
+	nextServiceFrame(t, frames, func(f FrameRequest) bool { return f.Data.Service == nil })
+	slowNext.Store(true)
+	SetAway(s, false)
+	first := nextServiceFrame(t, frames, func(f FrameRequest) bool { return f.Data.Service != nil })
+	if first.Data.Service.Provider != "A" {
+		t.Fatal("slow Canvas changed the resumed page")
+	}
+	select {
+	case frame := <-frames:
+		t.Fatalf("Canvas time consumed the resumed interval: %+v", frame.Data.Service)
+	case <-time.After(100 * time.Millisecond):
+	}
+	nextServiceFrame(t, frames, func(f FrameRequest) bool { return f.Data.Service != nil && f.Data.Service.Provider == "B" })
 }
 
 func TestServiceCursorFollowsIdentityAndTheNextSurvivingPage(t *testing.T) {

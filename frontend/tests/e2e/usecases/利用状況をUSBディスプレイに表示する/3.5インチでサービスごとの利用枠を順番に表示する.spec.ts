@@ -8,7 +8,8 @@ import { startServer } from '../../support/server';
 import { startHub } from '../../support/hub';
 import { localHome } from '../../support/local';
 
-const smallID = 'USB\\VID_1A86&PID_5722\\USB35INCHIPSV2';
+// A distinct hardware suffix keeps this saved selection disconnected when the real device is plugged in.
+const smallID = 'USB\\VID_1A86&PID_5722&E2E\\USB35INCHIPSV2';
 const settingsGet = 'token-monitor-turzx/internal/settings.Service.Get';
 const display = 'token-monitor-turzx/internal/display.Service.';
 const skipName = 'Skip full 5h or missing limits';
@@ -183,7 +184,8 @@ test('3.5インチのスタイル、サービス別巡回、スキップと保�
     await test.step('手順8', async () => {
       // Unplug/replug and COM resolution are exercised on hardware. This server checks continued preview/cycling while the explicit device is absent.
       const view = await rpc<View>(page, settingsGet);
-      expect(view.displays!.every(d => !d.connected)).toBe(true);
+      expect(view.displayID).toBe(smallID);
+      expect(view.displays!.find(d => d.deviceID === smallID)).toMatchObject({ connected: false });
       expect(view.compatibleThemeIDs).toHaveLength(4);
       const current = frame!.data.service!.key;
       await expect.poll(() => frame?.data.service?.key, { timeout: 10_000 }).not.toBe(current);
