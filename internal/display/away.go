@@ -25,7 +25,7 @@ func black() []byte {
 
 // blackFrame bypasses Canvas and uses the selected style's device encoding.
 func blackFrame(request FrameRequest) (Frame, error) {
-	frame := Frame{Request: request, OutputFormat: request.OutputFormat}
+	frame := Frame{Request: request, OutputFormat: request.OutputFormat, away: true}
 	if request.OutputFormat == "jpeg" {
 		frame.DeviceImage, frame.JPEG = black(), black()
 		return frame, nil

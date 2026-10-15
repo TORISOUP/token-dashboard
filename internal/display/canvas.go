@@ -45,6 +45,7 @@ type Frame struct {
 	Pages int
 	// presence closes on either away transition, invalidating queued images.
 	presence <-chan struct{}
+	away     bool
 }
 
 var errPresenceChanged = errors.New("display presence changed")
@@ -102,6 +103,10 @@ func (r *CanvasRenderer) RenderPrepared(ctx context.Context, request FrameReques
 		return Frame{}, errPresenceChanged
 	}
 	s.mu.Lock()
+	if s.away || s.awayCh != presence {
+		s.mu.Unlock()
+		return Frame{}, errPresenceChanged
+	}
 	s.nextFrame++
 	request.ID = s.nextFrame
 	pending := &pendingFrame{

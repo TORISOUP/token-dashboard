@@ -100,6 +100,7 @@ func runPresentation(ctx context.Context, s *Service, renderer *CanvasRenderer, 
 				case <-ctx.Done():
 					return
 				case <-s.State.Changed():
+				case <-awayChanged:
 				case <-poll.C:
 				}
 				continue
@@ -192,8 +193,11 @@ func runPresentation(ctx context.Context, s *Service, renderer *CanvasRenderer, 
 				}
 				output(frame)
 				emit(Updated, nil)
+				if wasAway {
+					deadline = time.Now().Add(interval)
+				}
+				wasAway = false
 			}
-			wasAway = false
 			previous = config
 			oldPages = pages
 			initialized = true
