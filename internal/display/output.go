@@ -94,6 +94,10 @@ func (o *Output) Run(ctx context.Context) {
 		}
 		id := config.TargetID
 		request := latest.Request
+		if !latest.presenceCurrent() {
+			latest = nil
+			continue
+		}
 		profile, known := turzx.ProfileForID(id)
 		if !known || !profile.Supports(config.Theme.Width, config.Theme.Height) || request.Generation != config.Generation || request.TargetID != id || request.Theme != config.Theme.ID || request.Width != config.Theme.Width || request.Height != config.Theme.Height {
 			if conn != nil {
@@ -122,7 +126,7 @@ func (o *Output) Run(ctx context.Context) {
 			sentGeneration = 0
 		}
 		current, err := o.configuration()
-		if err != nil || current.Generation != request.Generation || current.TargetID != id {
+		if err != nil || current.Generation != request.Generation || current.TargetID != id || !latest.presenceCurrent() {
 			latest = nil
 			continue
 		}
@@ -132,6 +136,10 @@ func (o *Output) Run(ctx context.Context) {
 		} else if profile.Transport == "serial-reva" && latest.OutputFormat == "png" {
 			var rgb []byte
 			rgb, err = rgb565(latest.DeviceImage)
+			if err == nil && !latest.presenceCurrent() {
+				latest = nil
+				continue
+			}
 			if err == nil {
 				err = conn.SendRGB565(rgb, request.Width, request.Height)
 			}

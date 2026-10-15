@@ -82,110 +82,123 @@ func runPresentation(ctx context.Context, s *Service, renderer *CanvasRenderer, 
 		now := time.Now()
 		large := config.Theme.Width == Width && config.Theme.Height == Height
 		away, awayChanged := s.awayState()
-		away = away && large // The 3.5-inch burn-in series is agreed separately.
-		stats, source := s.State.Snapshot()
-		if config.Source != source {
-			select {
-			case <-ctx.Done():
-				return
-			case <-s.State.Changed():
-			case <-poll.C:
+		count := 0
+		if away {
+			frame, blackErr := blackFrame(presentationRequest(config, step))
+			frame.presence = awayChanged
+			if blackErr != nil {
+				s.Logger.Error("display_black_failed", "cause", blackErr)
+			} else {
+				output(frame)
 			}
-			continue
-		}
-		hidden, err := s.hiddenSet()
-		if err != nil {
-			s.Logger.Warn("hidden_limits_unavailable", "cause", err)
-		}
-		data := themeData(withoutHidden(stats, hidden), now, source, page)
-		pages := []ServicePage{}
-		count := data.GaugePages
-		if config.Theme.DataLayout == "bars" {
-			count = data.BarPages
-		}
-		reset := !initialized || stats != nil && !hadStats || (config.Theme.ID != previous.Theme.ID && (config.Theme.ServiceLayout() || previous.Theme.ServiceLayout())) || config.Source != previous.Source || config.Cycle != previous.Cycle || config.Theme.ServiceLayout() && (!reflect.DeepEqual(config.Presentation.Services, previous.Presentation.Services) || config.Presentation.SkipFull5h != previous.Presentation.SkipFull5h)
-		if config.Theme.ServiceLayout() {
-			var message string
-			pages, message = ServicePages(stats, now, config, hidden)
-			data.ServiceMessage = message
-			count = len(pages)
-			if !reset && config.Cycle && len(oldPages) > 0 {
-				found := false
-				for offset := 0; offset < len(oldPages); offset++ {
-					key := oldPages[(page+offset)%len(oldPages)].Key
-					for index, candidate := range pages {
-						if candidate.Key == key {
-							page = index
-							found = true
+			wasAway = true
+		} else {
+			previousPage := page
+			stats, source := s.State.Snapshot()
+			if config.Source != source {
+				select {
+				case <-ctx.Done():
+					return
+				case <-s.State.Changed():
+				case <-poll.C:
+				}
+				continue
+			}
+			hidden, err := s.hiddenSet()
+			if err != nil {
+				s.Logger.Warn("hidden_limits_unavailable", "cause", err)
+			}
+			data := themeData(withoutHidden(stats, hidden), now, source, page)
+			pages := []ServicePage{}
+			count = data.GaugePages
+			if config.Theme.DataLayout == "bars" {
+				count = data.BarPages
+			}
+			reset := !initialized || stats != nil && !hadStats || (config.Theme.ID != previous.Theme.ID && (config.Theme.ServiceLayout() || previous.Theme.ServiceLayout())) || config.Source != previous.Source || config.Cycle != previous.Cycle || config.Theme.ServiceLayout() && (!reflect.DeepEqual(config.Presentation.Services, previous.Presentation.Services) || config.Presentation.SkipFull5h != previous.Presentation.SkipFull5h)
+			if config.Theme.ServiceLayout() {
+				var message string
+				pages, message = ServicePages(stats, now, config, hidden)
+				data.ServiceMessage = message
+				count = len(pages)
+				if !reset && config.Cycle && len(oldPages) > 0 {
+					found := false
+					for offset := 0; offset < len(oldPages); offset++ {
+						key := oldPages[(page+offset)%len(oldPages)].Key
+						for index, candidate := range pages {
+							if candidate.Key == key {
+								page = index
+								found = true
+								break
+							}
+						}
+						if found {
 							break
 						}
 					}
-					if found {
-						break
+					if !found {
+						page = 0
 					}
 				}
-				if !found {
-					page = 0
-				}
 			}
-		}
-		interval := config.CycleEvery
-		if interval <= 0 {
-			interval = time.Duration(config.CycleSeconds) * time.Second
-		}
-		if interval <= 0 {
-			interval = 10 * time.Second
-		}
-		if reset || !config.Cycle || page >= count {
-			page = 0
-		}
-		if reset || config.CycleSeconds != previous.CycleSeconds || config.CycleEvery != previous.CycleEvery {
-			deadline = now.Add(interval)
-		}
-		if config.Cycle && count > 1 && !away && !wasAway && !now.Before(deadline) {
-			page = (page + 1) % count
-			deadline = now.Add(interval)
-		}
-		if len(pages) > 0 {
-			data.Service = &pages[page]
-		} else if !config.Theme.ServiceLayout() {
-			data = themeData(withoutHidden(stats, hidden), now, source, page)
-		}
-		request := FrameRequest{TargetID: config.TargetID, Theme: config.Theme.ID, Width: config.Theme.Width, Height: config.Theme.Height, Data: data, OutputFormat: "png", Reverse180: config.Presentation.Reverse180, Generation: config.Generation}
-		if large {
-			request.OutputFormat = "jpeg"
-			request.Reverse180 = false
-			request.ShiftX, request.ShiftY = shiftSteps[step][0], shiftSteps[step][1]
-		}
-		if wasAway && !away {
-			step = 0
-			request.ShiftX, request.ShiftY = 0, 0
-		}
-		wasAway = away
-		var frame Frame
-		if away {
-			frame = Frame{Request: request, DeviceImage: black(), JPEG: black(), OutputFormat: "jpeg"}
-		} else {
-			frame, err = renderer.RenderPrepared(ctx, request, count)
-		}
-		if ctx.Err() != nil {
-			return
-		}
-		if err != nil {
-			s.Logger.Error("display_render_failed", "cause", err)
-		} else {
-			output(frame)
-			if !away {
+			interval := config.CycleEvery
+			if interval <= 0 {
+				interval = time.Duration(config.CycleSeconds) * time.Second
+			}
+			if interval <= 0 {
+				interval = 10 * time.Second
+			}
+			if reset || !config.Cycle || page >= count {
+				page = 0
+			}
+			if reset || wasAway || config.CycleSeconds != previous.CycleSeconds || config.CycleEvery != previous.CycleEvery {
+				deadline = now.Add(interval)
+			}
+			if config.Cycle && count > 1 && !away && !wasAway && !now.Before(deadline) {
+				page = (page + 1) % count
+				deadline = now.Add(interval)
+			}
+			if len(pages) > 0 {
+				data.Service = &pages[page]
+			} else if !config.Theme.ServiceLayout() {
+				data = themeData(withoutHidden(stats, hidden), now, source, page)
+			}
+			request := presentationRequest(config, step)
+			request.Data = data
+			if wasAway && !away {
+				step = 0
+				shifter.Reset(s.shiftEvery())
+				request.ShiftX, request.ShiftY = 0, 0
+			}
+			frame, err := renderer.RenderPrepared(ctx, request, count)
+			if ctx.Err() != nil {
+				return
+			}
+			if err == errPresenceChanged || !frame.presenceCurrent() {
+				page = previousPage
+				continue
+			}
+			if err != nil {
+				s.Logger.Error("display_render_failed", "cause", err)
+			} else {
 				s.mu.Lock()
-				s.preview = "data:image/png;base64," + base64.StdEncoding.EncodeToString(frame.PNG)
+				current := s.awayCh == awayChanged
+				if current {
+					s.preview = "data:image/png;base64," + base64.StdEncoding.EncodeToString(frame.PNG)
+				}
 				s.mu.Unlock()
+				if !current {
+					page = previousPage
+					continue
+				}
+				output(frame)
 				emit(Updated, nil)
 			}
+			wasAway = false
+			previous = config
+			oldPages = pages
+			initialized = true
+			hadStats = stats != nil
 		}
-		previous = config
-		oldPages = pages
-		initialized = true
-		hadStats = stats != nil
 		delay := time.Hour
 		if config.Cycle && count > 1 && !away {
 			delay = max(time.Millisecond, time.Until(deadline))
@@ -219,4 +232,15 @@ func runPresentation(ctx context.Context, s *Service, renderer *CanvasRenderer, 
 		}
 		timer.Stop()
 	}
+}
+
+// presentationRequest uses the same metadata for normal and black device images.
+func presentationRequest(config Configuration, step int) FrameRequest {
+	request := FrameRequest{TargetID: config.TargetID, Theme: config.Theme.ID, Width: config.Theme.Width, Height: config.Theme.Height, OutputFormat: "png", Reverse180: config.Presentation.Reverse180, Generation: config.Generation}
+	if config.Theme.Width == Width && config.Theme.Height == Height {
+		request.OutputFormat = "jpeg"
+		request.Reverse180 = false
+		request.ShiftX, request.ShiftY = shiftSteps[step][0], shiftSteps[step][1]
+	}
+	return request
 }

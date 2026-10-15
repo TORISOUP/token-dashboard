@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"image"
 	_ "image/jpeg"
@@ -42,6 +43,19 @@ type Frame struct {
 	OutputFormat string
 	// Pages is how many pages the style has; the frame is one of them.
 	Pages int
+	// presence closes on either away transition, invalidating queued images.
+	presence <-chan struct{}
+}
+
+var errPresenceChanged = errors.New("display presence changed")
+
+func (f Frame) presenceCurrent() bool {
+	select {
+	case <-f.presence:
+		return false
+	default:
+		return true
+	}
 }
 
 type frameResult struct {
@@ -50,8 +64,9 @@ type frameResult struct {
 }
 
 type pendingFrame struct {
-	request FrameRequest
-	result  chan frameResult
+	request  FrameRequest
+	result   chan frameResult
+	presence <-chan struct{}
 }
 
 // CanvasRenderer asks the existing WebView2 to draw one frame at a time.
@@ -82,12 +97,17 @@ func (r *CanvasRenderer) RenderPrepared(ctx context.Context, request FrameReques
 	waitCtx, cancel := context.WithTimeout(ctx, r.responseTimeout)
 	defer cancel()
 	s := r.service
+	away, presence := s.awayState()
+	if away {
+		return Frame{}, errPresenceChanged
+	}
 	s.mu.Lock()
 	s.nextFrame++
 	request.ID = s.nextFrame
 	pending := &pendingFrame{
-		request: request,
-		result:  make(chan frameResult, 1),
+		request:  request,
+		result:   make(chan frameResult, 1),
+		presence: presence,
 	}
 	s.pending = pending
 	s.mu.Unlock()
@@ -100,6 +120,8 @@ func (r *CanvasRenderer) RenderPrepared(ctx context.Context, request FrameReques
 	}()
 	r.emit(RenderRequested, nil)
 	select {
+	case <-presence:
+		return Frame{}, errPresenceChanged
 	case <-waitCtx.Done():
 		if ctx.Err() != nil {
 			return Frame{}, ctx.Err()
@@ -109,6 +131,7 @@ func (r *CanvasRenderer) RenderPrepared(ctx context.Context, request FrameReques
 		frame := result.frame
 		frame.Request = request
 		frame.Pages = pages
+		frame.presence = presence
 		return frame, result.err
 	}
 }
@@ -150,6 +173,11 @@ func (s *Service) CompleteFrame(id uint64, pngBase64, jpegBase64, renderError st
 	s.mu.Unlock()
 	if pending == nil || pending.request.ID != id {
 		return nil
+	}
+	select {
+	case <-pending.presence:
+		return nil
+	default:
 	}
 	if s.Configuration != nil {
 		current, configErr := s.Configuration()

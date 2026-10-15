@@ -75,8 +75,9 @@ export function EditSettings() {
   const [awayText, setAwayText] = useState<number | string>('');
   const seconds = draft?.cycleSeconds;
   const minutes = draft?.awayMinutes;
+  const saving = draft?.saving;
   useEffect(() => { if (seconds !== undefined) setCycleText(seconds); }, [seconds]);
-  useEffect(() => { if (minutes !== undefined) setAwayText(minutes); }, [minutes]);
+  useEffect(() => { if (!saving && minutes !== undefined) setAwayText(minutes); }, [minutes, saving]);
   if (!draft) return null;
   // The entry is read from the input itself, which has it before the page has taken the change. An
   // unchanged or invalid entry shows the saved value again; the server refuses a value out of range.
