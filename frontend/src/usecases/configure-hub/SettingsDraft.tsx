@@ -7,8 +7,8 @@ import { ErrorNotice } from '../../shared/ErrorNotice';
 import { publicError } from '../../shared/errors';
 import { useDraftDirty } from '../../shared/ExitContext';
 
-type Scope = 'connection' | 'display';
-type DisplayChange = { display?: string; style?: string; cycle?: boolean; cycleSeconds?: number; awayMinutes?: number; presentation?: Presentation };
+type Scope = 'connection' | 'display' | 'service-interval';
+type DisplayChange = { display?: string; style?: string; cycle?: boolean; cycleSeconds?: number; serviceCycleSeconds?: number; awayMinutes?: number; presentation?: Presentation };
 export const automatic = '__automatic__';
 
 function useDraft(saved: View) {
@@ -27,7 +27,7 @@ function useDraft(saved: View) {
     setDone(false);
     setFailed(null);
     try {
-      const view = await save.mutateAsync({ source, url, token, displayID: saved.displayID, limitStyle: saved.limitStyle, cycle: saved.cycle, cycleSeconds: saved.cycleSeconds, awayMinutes: saved.awayMinutes, presentation: saved.presentation });
+      const view = await save.mutateAsync({ source, url, token, displayID: saved.displayID, limitStyle: saved.limitStyle, cycle: saved.cycle, cycleSeconds: saved.cycleSeconds, serviceCycleSeconds: saved.serviceCycleSeconds, awayMinutes: saved.awayMinutes, presentation: saved.presentation });
       setSource(view.source || 'Local');
       setURL(view.url);
       setToken('');
@@ -44,10 +44,11 @@ function useDraft(saved: View) {
         displayID: change.display === undefined ? saved.displayID : change.display === automatic ? '' : change.display,
         limitStyle: change.style ?? saved.limitStyle,
         cycle: change.cycle ?? saved.cycle, cycleSeconds: change.cycleSeconds ?? saved.cycleSeconds,
+        serviceCycleSeconds: change.serviceCycleSeconds ?? saved.serviceCycleSeconds,
         awayMinutes: change.awayMinutes ?? saved.awayMinutes,
         presentation: change.presentation ?? saved.presentation,
       });
-    } catch { setFailed('display'); } finally { setPending({}); }
+    } catch { setFailed(change.serviceCycleSeconds === undefined ? 'display' : 'service-interval'); } finally { setPending({}); }
   }
   function setPresentation(change: Partial<Presentation>) {
     if (saved.presentation) void applyDisplay({ presentation: { ...structuredClone(saved.presentation), ...change } });
@@ -68,12 +69,14 @@ function useDraft(saved: View) {
     style: pending.style ?? (saved.limitStyle || 'Gauges'),
     cycle: pending.cycle ?? saved.cycle,
     cycleSeconds: saved.cycleSeconds,
+    serviceCycleSeconds: saved.serviceCycleSeconds,
     awayMinutes: saved.awayMinutes,
     setSource: edit(setSource), setURL: edit(setURL), setToken: edit(setToken),
     setDisplay: (display: string) => void applyDisplay({ display }),
     setStyle: (style: string) => void applyDisplay({ style }),
     setCycle: (cycle: boolean) => void applyDisplay({ cycle }),
     setCycleSeconds: (cycleSeconds: number) => void applyDisplay({ cycleSeconds }),
+    setServiceCycleSeconds: (serviceCycleSeconds: number) => void applyDisplay({ serviceCycleSeconds }),
     setAwayMinutes: (awayMinutes: number) => void applyDisplay({ awayMinutes }),
     setPresentation, setService,
     serviceLayout: saved.themes?.find(theme => theme.id === (pending.style ?? saved.limitStyle))?.dataLayout.startsWith('service-') ?? false,

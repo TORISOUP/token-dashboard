@@ -42,8 +42,9 @@ type View struct {
 	// LimitStyle is the selected style ID.
 	LimitStyle string `json:"limitStyle"`
 	// Cycle shows the contracts that do not fit the first page in turn, each page for CycleSeconds.
-	Cycle        bool `json:"cycle"`
-	CycleSeconds int  `json:"cycleSeconds"`
+	Cycle               bool `json:"cycle"`
+	CycleSeconds        int  `json:"cycleSeconds"`
+	ServiceCycleSeconds int  `json:"serviceCycleSeconds"`
 	// AwayMinutes is how long without input counts as away from the PC.
 	AwayMinutes        int                   `json:"awayMinutes"`
 	Presentation       *display.Presentation `json:"presentation"`
@@ -78,6 +79,8 @@ type SaveRequest struct {
 	// A nil Cycle and a zero CycleSeconds keep the current values.
 	Cycle        *bool `json:"cycle"`
 	CycleSeconds int   `json:"cycleSeconds"`
+	// A zero ServiceCycleSeconds keeps the current 3.5-inch interval.
+	ServiceCycleSeconds int `json:"serviceCycleSeconds"`
 	// A zero AwayMinutes keeps the current value.
 	AwayMinutes  int                   `json:"awayMinutes"`
 	Presentation *display.Presentation `json:"presentation"`
@@ -96,6 +99,8 @@ type file struct {
 	// Cycle absent means false; CycleSeconds absent means DefaultCycleSeconds.
 	Cycle        bool `json:"cycle,omitempty"`
 	CycleSeconds int  `json:"cycleSeconds,omitempty"`
+	// The UI mock keeps this runtime value in memory; disk storage is connected separately.
+	ServiceCycleSeconds int `json:"-"`
 	// AwayMinutes absent means DefaultAwayMinutes.
 	AwayMinutes  int                   `json:"awayMinutes,omitempty"`
 	Presentation *display.Presentation `json:"presentation,omitempty"`
@@ -123,6 +128,7 @@ type Service struct {
 	awayMinutes int
 	themes      map[string]display.Theme
 	generation  uint64
+	memory      *file
 }
 
 func New(path, appID string, list func() ([]turzx.Device, error), logger *slog.Logger) *Service {
@@ -158,6 +164,13 @@ func cycleSecondsOf(saved file) int {
 		return DefaultCycleSeconds
 	}
 	return saved.CycleSeconds
+}
+
+func serviceCycleSecondsOf(saved file) int {
+	if saved.ServiceCycleSeconds < MinCycleSeconds || saved.ServiceCycleSeconds > MaxCycleSeconds {
+		return DefaultCycleSeconds
+	}
+	return saved.ServiceCycleSeconds
 }
 
 // awayMinutesOf is the saved time without input that counts as away; a missing or out-of-range value
@@ -214,11 +227,14 @@ func (s *Service) Save(req SaveRequest) (view View, err error) {
 	if req.CycleSeconds != 0 && (req.CycleSeconds < MinCycleSeconds || req.CycleSeconds > MaxCycleSeconds) {
 		fields["cycleSeconds"] = fmt.Sprintf("Enter %d to %d seconds.", MinCycleSeconds, MaxCycleSeconds)
 	}
+	if req.ServiceCycleSeconds != 0 && (req.ServiceCycleSeconds < MinCycleSeconds || req.ServiceCycleSeconds > MaxCycleSeconds) {
+		fields["serviceCycleSeconds"] = fmt.Sprintf("Enter %d to %d seconds.", MinCycleSeconds, MaxCycleSeconds)
+	}
 	if req.AwayMinutes != 0 && (req.AwayMinutes < MinAwayMinutes || req.AwayMinutes > MaxAwayMinutes) {
 		fields["awayMinutes"] = fmt.Sprintf("Enter %d to %d minutes.", MinAwayMinutes, MaxAwayMinutes)
 	}
 	next := file{Source: req.Source, Connection: saved.Connection, DisplayID: req.DisplayID, LimitStyle: saved.LimitStyle, HiddenLimits: saved.HiddenLimits,
-		Cycle: saved.Cycle, CycleSeconds: saved.CycleSeconds, AwayMinutes: saved.AwayMinutes, Presentation: display.ClonePresentation(saved.Presentation)}
+		Cycle: saved.Cycle, CycleSeconds: saved.CycleSeconds, ServiceCycleSeconds: saved.ServiceCycleSeconds, AwayMinutes: saved.AwayMinutes, Presentation: display.ClonePresentation(saved.Presentation)}
 	if req.AwayMinutes != 0 {
 		next.AwayMinutes = req.AwayMinutes
 	}
@@ -227,6 +243,9 @@ func (s *Service) Save(req SaveRequest) (view View, err error) {
 	}
 	if req.CycleSeconds != 0 {
 		next.CycleSeconds = req.CycleSeconds
+	}
+	if req.ServiceCycleSeconds != 0 {
+		next.ServiceCycleSeconds = req.ServiceCycleSeconds
 	}
 	if req.LimitStyle != "" {
 		if s.themes == nil {
@@ -283,13 +302,19 @@ func (s *Service) Save(req SaveRequest) (view View, err error) {
 	if s.OnSaved != nil && (next.Source != saved.Source || (next.Source == "Hub" && conn != before)) {
 		s.OnSaved()
 	}
-	if (styleOf(next) != styleOf(saved) || next.Cycle != saved.Cycle || cycleSecondsOf(next) != cycleSecondsOf(saved) || s.themes != nil && (themeID(next.LimitStyle) != themeID(saved.LimitStyle) || presentationChanged || next.DisplayID != saved.DisplayID)) && s.OnDisplaySaved != nil {
+	if (styleOf(next) != styleOf(saved) || next.Cycle != saved.Cycle || cycleSecondsOf(next) != cycleSecondsOf(saved) || serviceCycleSecondsOf(next) != serviceCycleSecondsOf(saved) || s.themes != nil && (themeID(next.LimitStyle) != themeID(saved.LimitStyle) || presentationChanged || next.DisplayID != saved.DisplayID)) && s.OnDisplaySaved != nil {
 		s.OnDisplaySaved()
 	}
 	return s.view(next, conn, devices), nil
 }
 
 func (s *Service) read() (file, connection, error) {
+	if s.memory != nil {
+		saved := *s.memory
+		saved.Presentation = display.ClonePresentation(saved.Presentation)
+		saved.HiddenLimits = slices.Clone(saved.HiddenLimits)
+		return saved, connection{}, nil
+	}
 	var saved file
 	var conn connection
 	var data []byte
@@ -337,6 +362,12 @@ func (s *Service) read() (file, connection, error) {
 
 // write replaces the file only after the new content is fully on disk.
 func (s *Service) write(saved file) error {
+	if s.memory != nil {
+		saved.Presentation = display.ClonePresentation(saved.Presentation)
+		saved.HiddenLimits = slices.Clone(saved.HiddenLimits)
+		s.memory = &saved
+		return nil
+	}
 	data, err := json.MarshalIndent(saved, "", "  ")
 	if err != nil {
 		return err
@@ -381,7 +412,7 @@ func viewOf(saved file, conn connection, devices []turzx.Device) View {
 	if saved.DisplayID != "" && !slices.ContainsFunc(devices, func(d turzx.Device) bool { return d.ID == saved.DisplayID }) {
 		displays = append(displays, Display{DeviceID: saved.DisplayID, Name: saved.DisplayName})
 	}
-	return View{Source: saved.Source, URL: conn.URL, TokenSet: conn.Token != "", DisplayID: saved.DisplayID, Displays: displays, LimitStyle: styleOf(saved), Cycle: saved.Cycle, CycleSeconds: cycleSecondsOf(saved), AwayMinutes: awayMinutesOf(saved)}
+	return View{Source: saved.Source, URL: conn.URL, TokenSet: conn.Token != "", DisplayID: saved.DisplayID, Displays: displays, LimitStyle: styleOf(saved), Cycle: saved.Cycle, CycleSeconds: cycleSecondsOf(saved), ServiceCycleSeconds: serviceCycleSecondsOf(saved), AwayMinutes: awayMinutesOf(saved)}
 }
 
 // parseOrigin accepts only http(s)://host[:port] with an optional trailing slash.

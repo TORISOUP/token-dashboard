@@ -53,7 +53,11 @@ func DisplayConfiguration(s *Service) (display.Configuration, error) {
 	}
 	target := targetID(saved, devices)
 	connected := slices.ContainsFunc(devices, func(d turzx.Device) bool { return d.ID == target })
-	return display.Configuration{Theme: theme, Presentation: *presentationOf(saved), Source: saved.Source, Cycle: saved.Cycle, CycleSeconds: cycleSecondsOf(saved), Generation: s.generation, TargetID: target, TargetConnected: connected}, nil
+	cycle, seconds := saved.Cycle, cycleSecondsOf(saved)
+	if s.memory != nil && theme.ServiceLayout() {
+		cycle, seconds = true, serviceCycleSecondsOf(saved)
+	}
+	return display.Configuration{Theme: theme, Presentation: *presentationOf(saved), Source: saved.Source, Cycle: cycle, CycleSeconds: seconds, Generation: s.generation, TargetID: target, TargetConnected: connected}, nil
 }
 
 func (s *Service) view(saved file, conn connection, devices []turzx.Device) View {

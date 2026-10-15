@@ -40,7 +40,7 @@
 | [Styleを追加する](usecases/Styleを追加する/README.md) | テーマ作者 | 組み込み以外の表示スタイルを1つアプリの定義に加える | 5 | [UCP-1](design/UCP-1.md) | 対象 |
 | [Styleを削除する](usecases/Styleを削除する/README.md) | テーマ作者 | 追加した表示スタイルを1つアプリの定義から取り除く | 6 | [UCP-1](design/UCP-1.md) | 対象 |
 | [USBディスプレイの焼き付きを防ぐ](usecases/USBディスプレイの焼き付きを防ぐ/README.md) | 利用者 | TURZX の表示位置を少しずつずらし、席を離れている間は消灯して、焼き付き・残像を防ぐ | 7 | [UCP-1](design/UCP-1.md)、[UCP-2](design/UCP-2.md) | 対象 |
-| [設定を編集する](usecases/設定を編集する/README.md) | 利用者 | 表示の切り替えや離席の判定など、使い方に関わる設定を、表示の画面から切り離した設定画面で編集して保存する | 8 | [UCP-2](design/UCP-2.md) | 対象 |
+| [設定を編集する](usecases/設定を編集する/README.md) | 利用者 | 9.2インチの表示の切り替えや、機種共通の離席の判定を、Settings画面で編集して保存する | 8 | [UCP-2](design/UCP-2.md) | 対象 |
 
 常駐（タスクトレイ、ウィンドウの表示・非表示、終了）は独立したユースケースにせず、「利用状況をUSBディスプレイに表示する」の操作の一部として扱います。
 
@@ -163,3 +163,24 @@ CycleをONに戻し、ページ切り替えと位置ずらしが独立して進�
 完成系は前節と同じ保存済みLocal設定の複製でデスクトップアプリを起動します。
 実時間の3分間隔は、診断ログの`turzx_frame_sent`に記録される`shiftX`・`shiftY`と送信時刻で確認します。
 画面の目視と物理的な抜き差しは別に確認し、未実施の場合は未検証として扱います。
+
+### 巡回設定の画面を確認する
+
+作業ディレクトリはリポジトリのルートです。
+`node scripts/run.mjs generate`、`npm --prefix frontend run build`、`node scripts/build.mjs cycle-mock`の順にビルドし、`node scripts/mock-cycle-ux.mjs`で起動します。
+ブラウザーで`http://127.0.0.1:34145/`を開きます。
+Playwright CLIでは`playwright-cli open http://127.0.0.1:34145/`で接続します。
+
+合成点は`startCycleMock`です。検証用サーバーで`WAILS_CYCLE_MOCK=1`のときだけ、同じ設定サービスの保存先をメモリへ切り替え、利用状況と機器一覧の固定表を使います。
+既定の固定表にはClaudeのPersonal・WorkとCodexのPlusがあり、3.5インチ用は10秒、9.2インチ用は30秒・Cycle OFFから始めます。
+時間短縮は使わず、入力した秒数と実際の切り替え間隔を一致させます。
+設定の新しい専用間隔はメモリ内だけで保持し、実ユーザーの設定ファイル、Hub、Local取得、USB出力、Windows離席通知の監視は使いません。
+
+DisplayのStyle区画でPage intervalを変更し、Settingsの9.2-inch only区画のCycle timeが変わらないことを確認します。
+逆方向の変更でも3.5インチ用の値と巡回が変わらないことを確認します。
+Service contentでCodexだけを残すと1ページになり、Claudeだけを残すと2契約を巡回します。
+OutputとStyleを9.2インチ用へ変更すると、SettingsのCycleとCycle timeが適用されます。
+止めるときは起動したプロセスでCtrl+Cを押します。再起動すると固定表の初期値に戻ります。
+
+モックを無効にするには通常の起動コマンドを使います。検証用サーバーでも`WAILS_CYCLE_MOCK`が未設定なら実処理を使い、接続や保存の失敗からモックへ切り替えません。
+デスクトップ起動では、この環境変数を設定してもモックを使いません。

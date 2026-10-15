@@ -67,8 +67,31 @@ export function StyleSelect() {
     onChange={value => { if (value) draft.setStyle(value); }} />;
 }
 
-// The Settings page: the cycling of the pages, and the time without input that counts as away, in one card. Every
-// change applies and saves at once.
+// The 3.5-inch page interval stays next to the style and its preview.
+export function ServicePageInterval() {
+  const draft = useSettingsDraft();
+  const [text, setText] = useState<number | string>('');
+  const seconds = draft?.serviceCycleSeconds;
+  const saving = draft?.saving;
+  useEffect(() => { if (!saving && seconds !== undefined) setText(seconds); }, [seconds, saving]);
+  if (!draft?.serviceLayout) return null;
+  const commit = (raw: string) => {
+    const value = raw.replace(/\s*s$/, '').trim();
+    const seconds = /^\d+$/.test(value) ? Number(value) : NaN;
+    if (!draft.saving && seconds >= 5 && seconds <= 3600 && seconds !== draft.serviceCycleSeconds) draft.setServiceCycleSeconds(seconds);
+    else setText(draft.serviceCycleSeconds);
+  };
+  return <Stack gap="xs" mb="md">
+    <Row title="Page interval" hint="Pages switch automatically when there is more than one page.">
+      <NumberInput w={110} aria-label="Page interval" suffix=" s" min={5} max={3600} step={1} clampBehavior="none" hideControls disabled={draft.saving}
+        styles={{ input: { textAlign: 'right' } }} error={draft.fields.serviceCycleSeconds}
+        value={text} onChange={setText} onBlur={e => commit(e.currentTarget.value)} onKeyDown={e => { if (e.key === 'Enter') commit(e.currentTarget.value); }} />
+    </Row>
+    <ErrorNotice error={draft.errorFor('service-interval')} />
+  </Stack>;
+}
+
+// Settings keeps the 9.2-inch cycle separate from the shared away timeout.
 export function EditSettings() {
   const draft = useSettingsDraft();
   const [cycleText, setCycleText] = useState<number | string>('');
@@ -76,7 +99,7 @@ export function EditSettings() {
   const seconds = draft?.cycleSeconds;
   const minutes = draft?.awayMinutes;
   const saving = draft?.saving;
-  useEffect(() => { if (seconds !== undefined) setCycleText(seconds); }, [seconds]);
+  useEffect(() => { if (!saving && seconds !== undefined) setCycleText(seconds); }, [seconds, saving]);
   useEffect(() => { if (!saving && minutes !== undefined) setAwayText(minutes); }, [minutes, saving]);
   if (!draft) return null;
   // The entry is read from the input itself, which has it before the page has taken the change. An
@@ -93,17 +116,21 @@ export function EditSettings() {
     else setAwayText(draft.awayMinutes);
   };
   return <Stack gap="md">
-    <Card withBorder padding="md">
+    <Card component="section" aria-label="9.2-inch settings" withBorder padding="md">
+      <Title order={4} mb="sm">9.2-inch only</Title>
       <Row title="Cycle" hint="Show the contracts that do not fit in turn">
         <Group gap="md" wrap="nowrap">
-          <SwitchButton role="switch" label="Cycle" checked={draft.cycle ? 'true' : 'false'} onClick={() => draft.setCycle(!draft.cycle)} />
-          <NumberInput w={110} aria-label="Cycle time" suffix=" s" min={5} max={3600} step={1} allowDecimal={false} clampBehavior="strict" hideControls
+          <SwitchButton role="switch" label="Cycle" checked={draft.cycle ? 'true' : 'false'} disabled={draft.saving} onClick={() => draft.setCycle(!draft.cycle)} />
+          <NumberInput w={110} aria-label="Cycle time" suffix=" s" min={5} max={3600} step={1} allowDecimal={false} clampBehavior="strict" hideControls disabled={draft.saving}
             styles={{ input: { textAlign: 'right' } }} error={draft.fields.cycleSeconds}
             value={cycleText} onChange={setCycleText} onBlur={e => commitCycle(e.currentTarget.value)} onKeyDown={e => { if (e.key === 'Enter') commitCycle(e.currentTarget.value); }} />
         </Group>
       </Row>
+    </Card>
+    <Card component="section" aria-label="Common settings" withBorder padding="md">
+      <Title order={4} mb="sm">All displays</Title>
       <Row title="Away time" hint="No input for this long switches the TURZX off">
-        <NumberInput w={110} aria-label="Away time" suffix=" min" min={1} max={240} step={1} allowDecimal={false} clampBehavior="strict" hideControls
+        <NumberInput w={110} aria-label="Away time" suffix=" min" min={1} max={240} step={1} allowDecimal={false} clampBehavior="strict" hideControls disabled={draft.saving}
           styles={{ input: { textAlign: 'right' } }} error={draft.fields.awayMinutes}
           value={awayText} onChange={setAwayText} onBlur={e => commitAway(e.currentTarget.value)} onKeyDown={e => { if (e.key === 'Enter') commitAway(e.currentTarget.value); }} />
       </Row>
