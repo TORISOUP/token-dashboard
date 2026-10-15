@@ -48,6 +48,7 @@ func (o *Output) Run(ctx context.Context) {
 	var retryAt time.Time
 	var sentGeneration uint64
 	var sentPresence <-chan struct{}
+	var sentShift [2]int
 	fail := func(event string, err error) {
 		// Log a failure once until it changes, not on every image.
 		if err.Error() != lastFailure {
@@ -157,11 +158,13 @@ func (o *Output) Run(ctx context.Context) {
 			continue
 		}
 		lastFailure = ""
-		if sentGeneration != request.Generation || sentPresence != latest.presence {
-			o.logger.Info("turzx_frame_sent", "model", profile.Model, "width", request.Width, "height", request.Height, "generation", request.Generation, "away", latest.away)
+		shift := [2]int{request.ShiftX, request.ShiftY}
+		if sentGeneration != request.Generation || sentPresence != latest.presence || sentShift != shift {
+			o.logger.Info("turzx_frame_sent", "model", profile.Model, "width", request.Width, "height", request.Height, "generation", request.Generation, "away", latest.away, "shiftX", request.ShiftX, "shiftY", request.ShiftY)
 		}
 		sentGeneration = request.Generation
 		sentPresence = latest.presence
+		sentShift = shift
 		latest = nil
 	}
 }
