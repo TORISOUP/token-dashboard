@@ -41,7 +41,7 @@ type View struct {
 	Displays  []Display `json:"displays"`
 	// LimitStyle is the selected style ID.
 	LimitStyle string `json:"limitStyle"`
-	// Cycle shows the contracts that do not fit the first page in turn, each page for CycleSeconds.
+	// Cycle and CycleSeconds apply to the large display layouts.
 	Cycle               bool `json:"cycle"`
 	CycleSeconds        int  `json:"cycleSeconds"`
 	ServiceCycleSeconds int  `json:"serviceCycleSeconds"`
@@ -99,8 +99,8 @@ type file struct {
 	// Cycle absent means false; CycleSeconds absent means DefaultCycleSeconds.
 	Cycle        bool `json:"cycle,omitempty"`
 	CycleSeconds int  `json:"cycleSeconds,omitempty"`
-	// The UI mock keeps this runtime value in memory; disk storage is connected separately.
-	ServiceCycleSeconds int `json:"-"`
+	// ServiceCycleSeconds is shared by the service display layouts, independent of CycleSeconds.
+	ServiceCycleSeconds int `json:"serviceCycleSeconds,omitempty"`
 	// AwayMinutes absent means DefaultAwayMinutes.
 	AwayMinutes  int                   `json:"awayMinutes,omitempty"`
 	Presentation *display.Presentation `json:"presentation,omitempty"`
@@ -128,7 +128,6 @@ type Service struct {
 	awayMinutes int
 	themes      map[string]display.Theme
 	generation  uint64
-	memory      *file
 }
 
 func New(path, appID string, list func() ([]turzx.Device, error), logger *slog.Logger) *Service {
@@ -309,12 +308,6 @@ func (s *Service) Save(req SaveRequest) (view View, err error) {
 }
 
 func (s *Service) read() (file, connection, error) {
-	if s.memory != nil {
-		saved := *s.memory
-		saved.Presentation = display.ClonePresentation(saved.Presentation)
-		saved.HiddenLimits = slices.Clone(saved.HiddenLimits)
-		return saved, connection{}, nil
-	}
 	var saved file
 	var conn connection
 	var data []byte
@@ -362,12 +355,6 @@ func (s *Service) read() (file, connection, error) {
 
 // write replaces the file only after the new content is fully on disk.
 func (s *Service) write(saved file) error {
-	if s.memory != nil {
-		saved.Presentation = display.ClonePresentation(saved.Presentation)
-		saved.HiddenLimits = slices.Clone(saved.HiddenLimits)
-		s.memory = &saved
-		return nil
-	}
 	data, err := json.MarshalIndent(saved, "", "  ")
 	if err != nil {
 		return err

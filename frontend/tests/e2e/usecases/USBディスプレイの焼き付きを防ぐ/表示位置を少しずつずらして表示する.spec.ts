@@ -192,7 +192,7 @@ test('3.5インチの全Styleと反転で機器用PNGだけを8点移動し、Lo
       { provider: 'Codex', plan: 'Plus', metrics: [{ label: 'Session', remaining_percent: 62 }] },
     ]);
     write('settings.json', { source: 'Local', displayID: 'USB\\VID_1A86&PID_5722&E2E\\USB35INCHIPSV2', displayName: 'TURZX E2E 3.5-inch',
-      limitStyle: 'gauges-35-landscape', cycle: false, cycleSeconds: 50,
+      limitStyle: 'gauges-35-landscape', cycle: false, cycleSeconds: 50, serviceCycleSeconds: 3600,
       presentation: { reverse180: false, skipFull5h: false, services: { Local: {
         Claude: { enabled: true, content: 'Both' }, Codex: { enabled: true, content: 'Both' },
       } } },
@@ -248,9 +248,8 @@ test('3.5インチの全Styleと反転で機器用PNGだけを8点移動し、Lo
       await checkPNGShift(page, frames);
     });
     await test.step('受け入れ条件', async () => {
-      await page.getByRole('link', { name: 'Settings', exact: true }).click();
-      await page.getByRole('switch', { name: 'Cycle', exact: true }).click();
-      await page.getByRole('link', { name: 'Display', exact: true }).click();
+      const interval = page.getByRole('textbox', { name: 'Page interval', exact: true });
+      await interval.fill('50'); await interval.press('Enter');
       frames = [];
       await expect.poll(() => new Set(frames.map(f => f.request.data.service?.key)).size, { timeout: 7_000 }).toBeGreaterThan(1);
       expect(new Set(positions()).size).toBeGreaterThan(3); ordered();
@@ -267,7 +266,7 @@ test('3.5インチの全Styleと反転で機器用PNGだけを8点移動し、Lo
       expect(offset(moved)).toBe('4,0'); expect(moved.at - first.at).toBeGreaterThanOrEqual(850);
       await checkPNGShift(page, frames.slice(frozen));
       const saved = JSON.parse(readFileSync(settingsFile, 'utf8'));
-      expect(saved.source).toBe('Local'); expect(saved.cycle).toBe(true);
+      expect(saved.source).toBe('Local'); expect(saved.serviceCycleSeconds).toBe(50);
       expect(Object.keys(saved).some(key => /shift/i.test(key))).toBe(false);
     });
   } finally {

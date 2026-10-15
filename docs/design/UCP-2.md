@@ -42,6 +42,8 @@ sequenceDiagram
 
 表示候補の導出: `internal/turzx/profiles.go`で機器識別子を対応描画寸法と通信方式に解決する。設定サービスは保存した表示先、またはAutomaticの最初の機器を同じ規則で解決し、`Profile.Supports`による寸法の完全一致から`View.compatibleThemeIDs`を導出する。`View.themes`には全メタデータを返す。新しいスタイルの選択は保存時点の機器一覧で再検証する。候補の取得と警告の更新では保存や巡回状態を変更しない。
 
-モックの境界: `main.go`から呼ぶ`startCycleMock`を合成点とし、検証用サーバーで`WAILS_CYCLE_MOCK=1`のときだけ、設定の保存先を`internal/settings/mock_cycle.go`のメモリ内の値へ、機器一覧と利用状況を固定表へ切り替える。`settings.View`と`settings.SaveRequest`の`serviceCycleSeconds`、設定の検証・反映・巡回・Canvas描画は本番と共有する。モックの専用間隔はディスクへ保存しない。通常起動では[保存形式](data.md)に従い、取得失敗から固定値へ切り替えない。
+巡回設定の反映: `internal/settings/presentation.go`の`DisplayConfiguration`が、サービス表示用スタイルには巡回ONと`serviceCycleSeconds`、大型表示用スタイルには`cycle`と`cycleSeconds`を渡す。ページと期限の管理は`internal/display/presentation_run.go`で共用し、使用中の間隔の変更だけで現在ページを保って期限を数え直す。使用していない側の巡回設定の変更ではページと期限を変えない。
+
+モックの境界: 設定の保存先、機器一覧、利用状況を固定値へ切り替える合成点は置かない。[保存形式](data.md)に従って設定を読み書きし、実処理の失敗から固定値へ切り替えない。自動検証の固定応答は外部システム境界で供給する。
 
 UC 固有の逸脱: なし

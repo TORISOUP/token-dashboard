@@ -226,8 +226,8 @@ test('3.5インチStyleは離席中もLocalを取得し、最新値と元のペ�
       { provider: 'Codex', plan: 'Plus', metrics: [{ label: 'Session', remaining_percent: 62 }] },
     ]);
     write('settings.json', { source: 'Local', displayID: 'USB\\VID_1A86&PID_5722\\USB35INCHIPSV2', displayName: 'TURZX 3.5-inch',
-      // shortIntervals scales Cycle time by 0.1: 50 here exercises a full 5-second interval.
-      limitStyle: 'bars-35-landscape', cycle: true, cycleSeconds: 50, hiddenLimits: ['unrelated'],
+      // shortIntervals scales Page interval by 0.1: 50 here exercises a full 5-second interval.
+      limitStyle: 'bars-35-landscape', cycle: true, cycleSeconds: 50, serviceCycleSeconds: 50, hiddenLimits: ['unrelated'],
       presentation: { reverse180: false, skipFull5h: false, services: { Local: {
         Claude: { enabled: true, content: 'Both' }, Codex: { enabled: true, content: 'Both' },
       } } },

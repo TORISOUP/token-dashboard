@@ -23,7 +23,7 @@ test('Settings 画面で Cycle・Cycle time・Away time を Save なしで保存
       await expect(page.getByRole('navigation', { name: 'Menu' })).toBeVisible();
     });
     await test.step('手順1', async () => {
-      // Settings is the last item of the menu. One card holds Cycle, its time and Away time, and nothing
+      // Settings is the last item of the menu. Separate cards hold 9.2-inch and common settings, and nothing
       // is saved yet: Cycle is off, the time is 10 seconds and Away time is 10 minutes.
       await expect(page.getByRole('navigation', { name: 'Menu' }).getByRole('link')).toHaveText(['Display', 'Styles', 'Connection', 'Settings']);
       await page.getByRole('link', { name: 'Settings' }).click();
@@ -31,8 +31,8 @@ test('Settings 画面で Cycle・Cycle time・Away time を Save なしで保存
       await expect(cycle()).toHaveAttribute('aria-checked', 'false');
       await expect(time()).toHaveValue('10 s');
       await expect(away()).toHaveValue('10 min');
-      const card = (input: ReturnType<typeof time>) => input.locator('xpath=ancestor::div[contains(@class,"Card")][1]').elementHandle();
-      expect(await (await card(time()))!.evaluate((a, b) => a === b, (await card(away()))!)).toBe(true);
+      const card = (input: ReturnType<typeof time>) => input.locator('xpath=ancestor::section[contains(@class,"Card")][1]').elementHandle();
+      expect(await (await card(time()))!.evaluate((a, b) => a === b, (await card(away()))!)).toBe(false);
       const sw = (await cycle().boundingBox())!;
       const t = (await time().boundingBox())!;
       expect(t.x).toBeGreaterThan(sw.x + sw.width);

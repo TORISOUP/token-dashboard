@@ -146,13 +146,9 @@ test('3.5インチのスタイル、サービス別巡回、スキップと保�
       await expect.poll(() => frame?.data.service?.count).toBe(6);
     });
     await test.step('手順5', async () => {
-      await page.getByRole('link', { name: 'Settings', exact: true }).click();
-      await page.getByRole('textbox', { name: 'Cycle time' }).fill('50');
-      await page.getByRole('textbox', { name: 'Cycle time' }).press('Enter');
-      await expect.poll(() => file().cycleSeconds).toBe(50);
-      await page.getByRole('switch', { name: 'Cycle', exact: true }).click();
-      await expect.poll(() => file().cycle).toBe(true);
-      await page.getByRole('link', { name: 'Display', exact: true }).click();
+      await page.getByRole('textbox', { name: 'Page interval' }).fill('50');
+      await page.getByRole('textbox', { name: 'Page interval' }).press('Enter');
+      await expect.poll(() => file().serviceCycleSeconds).toBe(50);
       await expect.poll(() => frame?.data.service?.number, { timeout: 10_000 }).toBe(2);
     });
     await test.step('手順6', async () => {
@@ -203,15 +199,13 @@ test('3.5インチのスタイル、サービス別巡回、スキップと保�
       await expect(page.getByRole('textbox', { name: 'Display style' })).toHaveValue(styles[3][0]);
       await expect(page.getByRole('switch', { name: 'Rotate 180°', exact: true })).toHaveAttribute('aria-checked', 'true');
       await expect(page.getByRole('checkbox', { name: 'Claude Pro Alpha 5h', exact: true })).toHaveAttribute('aria-checked', 'false');
-      expect(file().cycle).toBe(true);
-      expect(file().cycleSeconds).toBe(50);
+      expect(file().serviceCycleSeconds).toBe(50);
     });
     await test.step('受け入れ条件', async () => {
-      // Freeze on page one to compare selection and failure states independently of cycling.
-      await page.getByRole('link', { name: 'Settings', exact: true }).click();
-      await page.getByRole('switch', { name: 'Cycle', exact: true }).click();
-      await expect.poll(() => file().cycle).toBeFalsy();
-      await page.getByRole('link', { name: 'Display', exact: true }).click();
+      // Keep the page during selection and failure comparisons by using a long service interval.
+      await page.getByRole('textbox', { name: 'Page interval' }).fill('3600');
+      await page.getByRole('textbox', { name: 'Page interval' }).press('Enter');
+      await expect.poll(() => file().serviceCycleSeconds).toBe(3600);
       await page.getByRole('switch', { name: skipName, exact: true }).click();
       await expect.poll(() => frame?.data.service?.provider).toBe('Codex');
       await expect.poll(() => frame?.data.service?.count).toBe(2);

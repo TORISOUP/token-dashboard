@@ -54,7 +54,7 @@ func DisplayConfiguration(s *Service) (display.Configuration, error) {
 	target := targetID(saved, devices)
 	connected := slices.ContainsFunc(devices, func(d turzx.Device) bool { return d.ID == target })
 	cycle, seconds := saved.Cycle, cycleSecondsOf(saved)
-	if s.memory != nil && theme.ServiceLayout() {
+	if theme.ServiceLayout() {
 		cycle, seconds = true, serviceCycleSecondsOf(saved)
 	}
 	return display.Configuration{Theme: theme, Presentation: *presentationOf(saved), Source: saved.Source, Cycle: cycle, CycleSeconds: seconds, Generation: s.generation, TargetID: target, TargetConnected: connected}, nil

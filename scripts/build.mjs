@@ -50,10 +50,9 @@ try {
     run(cli, ['generate', 'syso', '-manifest', 'bin/app.manifest', '-icon', 'build/windows/app.ico', '-arch', arch, '-out', `rsrc_windows_${arch}.syso`]);
     const ldflags = ['-H windowsgui', ...overrides.map(([name, value]) => `-X 'main.${name}=${value}'`)].join(' ');
     run('go', ['build', '-trimpath', ...(production ? ['-tags', 'production'] : []), '-ldflags', ldflags, '-o', target, '.'], { env: { ...process.env, GOOS: 'windows', GOARCH: arch, CGO_ENABLED: '0' } });
-  } else if (command === 'server' || command === 'cycle-mock') {
-    if (command === 'server') bundleTokscale();
-    const output = command === 'cycle-mock' ? resolve('bin', 'token-monitor-turzx-cycle-mock' + (windows ? '.exe' : '')) : server;
-    run('go', ['build', '-trimpath', '-tags', 'server,production', '-o', output, '.'], { env: { ...process.env, CGO_ENABLED: '0' } });
+  } else if (command === 'server') {
+    bundleTokscale();
+    run('go', ['build', '-trimpath', '-tags', 'server,production', '-o', server, '.'], { env: { ...process.env, CGO_ENABLED: '0' } });
   } else if (command === 'run' || command === 'run-server') {
     run(command === 'run' ? target : server, []);
   } else if (command === 'package') {
