@@ -33,6 +33,13 @@ test('Settings 画面で Cycle・Cycle time・Away time を Save なしで保存
       await expect(away()).toHaveValue('10 min');
       const card = (input: ReturnType<typeof time>) => input.locator('xpath=ancestor::section[contains(@class,"Card")][1]').elementHandle();
       expect(await (await card(time()))!.evaluate((a, b) => a === b, (await card(away()))!)).toBe(false);
+      const large = page.getByRole('region', { name: '9.2-inch settings', exact: true });
+      const common = page.getByRole('region', { name: 'Common settings', exact: true });
+      await expect(large.getByRole('heading', { name: '9.2-inch only', exact: true })).toBeVisible();
+      await expect(common.getByRole('heading', { name: 'All displays', exact: true })).toBeVisible();
+      await expect(large.getByRole('textbox', { name: 'Away time' })).toHaveCount(0);
+      await expect(common.getByRole('switch', { name: 'Cycle' })).toHaveCount(0);
+      await expect(page.getByRole('heading', { name: /^(Display|Away)$/ })).toHaveCount(0);
       const sw = (await cycle().boundingBox())!;
       const t = (await time().boundingBox())!;
       expect(t.x).toBeGreaterThan(sw.x + sw.width);
@@ -89,6 +96,11 @@ test('Settings 画面で Cycle・Cycle time・Away time を Save なしで保存
       await expect(away()).toHaveValue('2 min');
     });
     await test.step('受け入れ条件', async () => {
+      await page.setViewportSize({ width: 640, height: 850 });
+      const large = (await page.getByRole('region', { name: '9.2-inch settings' }).boundingBox())!;
+      const common = (await page.getByRole('region', { name: 'Common settings' }).boundingBox())!;
+      expect(common.y).toBeGreaterThan(large.y + large.height);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
       // They are on the Settings page only: the Display page keeps the style choice and has none of them.
       await page.getByRole('link', { name: 'Display' }).click();
       await expect(page.getByRole('textbox', { name: 'Display style' })).toBeVisible();

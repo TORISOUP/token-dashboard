@@ -47,13 +47,13 @@ function stats(remaining = 20) {
 }
 
 test('3.5インチのスタイル、サービス別巡回、スキップと保存を維持する', async ({ page, context }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   const dataDir = mkdtempSync(join(tmpdir(), 'turzx-services-e2e-'));
   const settingsFile = join(dataDir, 'settings.json');
   const { home, env } = localHome();
   const hub = await startHub();
   // A saved explicit selection remains selectable while unplugged. No physical USB is opened.
-  writeFileSync(settingsFile, JSON.stringify({ source: 'Local', displayID: smallID, displayName: 'TURZX 3.5"', limitStyle: 'Gauges' }));
+  writeFileSync(settingsFile, JSON.stringify({ source: 'Local', displayID: smallID, displayName: 'TURZX 3.5"', limitStyle: 'Gauges', cycle: false, cycleSeconds: 37 }));
   let server = await startServer(dataDir, 34137, env);
   let frame: FrameRequest | undefined;
   let completed: { request: FrameRequest; png: string; device: string } | undefined;
@@ -75,6 +75,13 @@ test('3.5インチのスタイル、サービス別巡回、スキップと保�
   observe(page);
   const file = () => JSON.parse(readFileSync(settingsFile, 'utf8'));
   const preview = () => page.getByRole('img', { name: 'Display preview', exact: true });
+  const interval = () => page.getByRole('textbox', { name: 'Page interval', exact: true });
+  const setPageInterval = async (value: number, blur = false) => {
+    await interval().focus(); await interval().press('Control+a'); await interval().pressSequentially(String(value));
+    await interval().press(blur ? 'Tab' : 'Enter');
+    await expect.poll(() => file().serviceCycleSeconds).toBe(value);
+    await expect(interval()).toBeEnabled();
+  };
   const selectStyle = async (label: string, id: string, width: number, height: number) => {
     await page.getByRole('textbox', { name: 'Display style' }).click();
     await page.getByRole('option', { name: label, exact: true }).click();
@@ -82,6 +89,7 @@ test('3.5インチのスタイル、サービス別巡回、スキップと保�
     // Reopening the server page can leave one old Canvas request pending until its 10s deadline.
     await expect.poll(() => completed?.request.theme, { timeout: 20_000 }).toBe(id);
     await expect.poll(() => preview().evaluate((img: HTMLImageElement) => [img.naturalWidth, img.naturalHeight])).toEqual([width, height]);
+    await expect(interval()).toHaveValue(`${file().serviceCycleSeconds ?? 10} s`);
   };
   const openServices = async () => {
     const summary = page.locator('summary').filter({ hasText: 'Service content' });
@@ -117,6 +125,14 @@ test('3.5インチのスタイル、サービス別巡回、スキップと保�
         expect(completed!.request.data.available).toBe(false);
       }
       await selectStyle(...styles[0]);
+      // The dedicated default is available before any usage, independent of the old 37-second setting.
+      await expect(interval()).toHaveValue('10 s');
+      await expect(page.getByText('Pages switch automatically when there is more than one page.', { exact: true })).toBeVisible();
+      const selectBox = (await page.getByRole('textbox', { name: 'Display style' }).boundingBox())!;
+      const intervalBox = (await interval().boundingBox())!;
+      const previewBox = (await preview().boundingBox())!;
+      expect(intervalBox.y).toBeGreaterThan(selectBox.y + selectBox.height);
+      expect(intervalBox.y + intervalBox.height).toBeLessThan(previewBox.y);
       await page.getByRole('switch', { name: 'Rotate 180°', exact: true }).click();
       await expect.poll(() => file().presentation.reverse180).toBe(true);
       await expect.poll(() => completed?.request.reverse180).toBe(true);
@@ -130,6 +146,9 @@ test('3.5インチのスタイル、サービス別巡回、スキップと保�
       expect(frame!.data.service!.tokens![0].tokensText).toBe('0');
       expect(frame!.data.service!.tokens![0].costText).toBe('$0.00');
       expect(frame!.data.service!.circles!.length).toBe(3);
+      expect(file().cycle ?? false).toBe(false);
+      const firstPage = frame!.data.service!.key;
+      await expect.poll(() => frame?.data.service?.key, { timeout: 5_000 }).not.toBe(firstPage);
     });
     await test.step('手順4', async () => {
       const summary = page.locator('summary').filter({ hasText: 'Service content' });
@@ -146,10 +165,67 @@ test('3.5インチのスタイル、サービス別巡回、スキップと保�
       await expect.poll(() => frame?.data.service?.count).toBe(6);
     });
     await test.step('手順5', async () => {
-      await page.getByRole('textbox', { name: 'Page interval' }).fill('50');
-      await page.getByRole('textbox', { name: 'Page interval' }).press('Enter');
-      await expect.poll(() => file().serviceCycleSeconds).toBe(50);
-      await expect.poll(() => frame?.data.service?.number, { timeout: 10_000 }).toBe(2);
+      await setPageInterval(5, true);
+      for (const invalid of ['4', '3601', '', '1.5']) {
+        const before = readFileSync(settingsFile);
+        await interval().fill(invalid); await interval().press('Enter');
+        await expect(interval()).toHaveValue('5 s');
+        expect(readFileSync(settingsFile).equals(before)).toBe(true);
+      }
+      await setPageInterval(3600);
+      const held = frame!;
+      await setPageInterval(50);
+      await expect.poll(() => frame?.id).toBeGreaterThan(held.id);
+      expect(frame!.data.service!.key).toBe(held.data.service!.key);
+      expect(file().cycleSeconds).toBe(37);
+
+      const before = readFileSync(settingsFile), view = await rpc<View>(page, settingsGet);
+      chmodSync(settingsFile, 0o444);
+      try {
+        await interval().fill('60'); await interval().press('Enter');
+        const error = page.getByRole('alert');
+        await expect(error).toBeVisible(); await expect(interval()).toHaveValue('50 s');
+        expect(readFileSync(settingsFile).equals(before)).toBe(true);
+        expect((await rpc<View>(page, settingsGet)).generation).toBe(view.generation);
+        const fieldBox = (await interval().boundingBox())!, errorBox = (await error.boundingBox())!, imageBox = (await preview().boundingBox())!;
+        expect(errorBox.y).toBeGreaterThan(fieldBox.y);
+        expect(errorBox.y).toBeLessThan(imageBox.y);
+      } finally { chmodSync(settingsFile, 0o600); }
+      // A retry succeeds and changes the active interval while preserving the current page.
+      await setPageInterval(51); await setPageInterval(50, true);
+      await expect(page.getByRole('alert')).toHaveCount(0);
+      await expect(page.getByText('Saved.', { exact: true })).toHaveCount(0);
+      const current = frame!.data.service!.key;
+      await page.getByRole('link', { name: 'Settings', exact: true }).click();
+      await page.getByRole('textbox', { name: 'Cycle time' }).fill('70');
+      await page.getByRole('textbox', { name: 'Cycle time' }).press('Enter');
+      await expect.poll(() => file().cycleSeconds).toBe(70);
+      await page.getByRole('switch', { name: 'Cycle', exact: true }).click();
+      await expect.poll(() => file().cycle).toBe(true);
+      await page.getByRole('switch', { name: 'Cycle', exact: true }).click();
+      await expect.poll(() => file().cycle ?? false).toBe(false);
+      expect(file().serviceCycleSeconds).toBe(50);
+      await page.getByRole('link', { name: 'Display', exact: true }).click();
+      await expect(interval()).toHaveValue('50 s');
+      await expect.poll(() => frame?.data.service?.key, { timeout: 8_000 }).not.toBe(current);
+      // One enabled service also cycles when one contract exceeds the page capacity.
+      await openServices();
+      for (const id of ['Codex', 'Copilot', 'antigravity-cli']) {
+        await page.getByRole('switch', { name: `Show ${id}`, exact: true }).click();
+        await expect(page.getByRole('switch', { name: `Show ${id}`, exact: true })).toHaveAttribute('aria-checked', 'false');
+      }
+      await expect.poll(() => frame?.data.service?.count).toBe(2);
+      expect(frame!.data.service!.provider).toBe('Claude');
+      await setPageInterval(5);
+      const overflowPage = frame!.data.service!.key;
+      await expect.poll(() => frame?.data.service?.key, { timeout: 4_000 }).not.toBe(overflowPage);
+      expect(frame!.data.service!.provider).toBe('Claude');
+      for (const id of ['Codex', 'Copilot', 'antigravity-cli']) {
+        await page.getByRole('switch', { name: `Show ${id}`, exact: true }).click();
+        await expect(page.getByRole('switch', { name: `Show ${id}`, exact: true })).toHaveAttribute('aria-checked', 'true');
+      }
+      await expect.poll(() => frame?.data.service?.count).toBe(6);
+      await setPageInterval(50);
     });
     await test.step('手順6', async () => {
       const current = frame!;
@@ -200,15 +276,20 @@ test('3.5インチのスタイル、サービス別巡回、スキップと保�
       await expect(page.getByRole('switch', { name: 'Rotate 180°', exact: true })).toHaveAttribute('aria-checked', 'true');
       await expect(page.getByRole('checkbox', { name: 'Claude Pro Alpha 5h', exact: true })).toHaveAttribute('aria-checked', 'false');
       expect(file().serviceCycleSeconds).toBe(50);
+      expect(file().cycleSeconds).toBe(70);
+      expect(file().cycle ?? false).toBe(false);
+      await expect(interval()).toHaveValue('50 s');
     });
     await test.step('受け入れ条件', async () => {
-      // Keep the page during selection and failure comparisons by using a long service interval.
-      await page.getByRole('textbox', { name: 'Page interval' }).fill('3600');
-      await page.getByRole('textbox', { name: 'Page interval' }).press('Enter');
-      await expect.poll(() => file().serviceCycleSeconds).toBe(3600);
+      await setPageInterval(5);
       await page.getByRole('switch', { name: skipName, exact: true }).click();
       await expect.poll(() => frame?.data.service?.provider).toBe('Codex');
       await expect.poll(() => frame?.data.service?.count).toBe(2);
+      // Codex alone remains visible, but both contracts must still cycle with legacy Cycle OFF.
+      const contractPage = frame!.data.service!.key;
+      await expect.poll(() => frame?.data.service?.key, { timeout: 4_000 }).not.toBe(contractPage);
+      expect(frame!.data.service!.provider).toBe('Codex');
+      expect(file().cycle ?? false).toBe(false);
       await openServices();
       await expect(content('Copilot').getByRole('switch')).toHaveAttribute('aria-checked', 'true');
       await expect(content('antigravity-cli').getByRole('switch')).toHaveAttribute('aria-checked', 'true');
@@ -216,6 +297,12 @@ test('3.5インチのスタイル、サービス別巡回、スキップと保�
       await expect.poll(() => frame?.data.service?.count).toBe(1);
       await expect.poll(() => frame?.data.service?.showLimits).toBe(false);
       expect(file().hiddenLimits).toHaveLength(1);
+      const onlyPage = frame!.data.service!.key;
+      await page.waitForTimeout(1_200);
+      expect(frame!.data.service!.count).toBe(1);
+      expect(frame!.data.service!.key).toBe(onlyPage);
+      await expect(interval()).toBeVisible();
+      await setPageInterval(3600);
 
       // A real replacement failure preserves the file, generation, page, and checked state.
       const before = readFileSync(settingsFile); const view = await rpc<View>(page, settingsGet); const key = frame!.data.service!.key;
@@ -250,6 +337,26 @@ test('3.5インチのスタイル、サービス別巡回、スキップと保�
       const narrow = await content('Claude').boundingBox(); const narrowNext = await content('Codex').boundingBox();
       expect(narrowNext!.y).toBeGreaterThan(narrow!.y);
       expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+      await expect(interval()).toBeVisible();
+      for (const [label, id, width, height] of styles) await selectStyle(label, id, width, height);
+
+      // Local and Hub keep the same interval across connection saves.
+      await page.getByRole('link', { name: 'Connection', exact: true }).click();
+      await page.getByRole('textbox', { name: 'Data source' }).click();
+      await page.getByRole('option', { name: 'Local', exact: true }).click();
+      await page.getByRole('button', { name: 'Save', exact: true }).click();
+      await expect.poll(() => file().source).toBe('Local');
+      await expect.poll(() => hub.streams()).toBe(0);
+      expect(file().serviceCycleSeconds).toBe(3600);
+      await page.getByRole('textbox', { name: 'Data source' }).click();
+      await page.getByRole('option', { name: 'Hub', exact: true }).click();
+      await page.getByRole('button', { name: 'Save', exact: true }).click();
+      await expect.poll(() => file().source).toBe('Hub');
+      await expect.poll(() => hub.streams()).toBe(1);
+      hub.send('snapshot', stats(21));
+      expect(file().serviceCycleSeconds).toBe(3600);
+      await page.getByRole('link', { name: 'Display', exact: true }).click(); await openServices();
+      await expect(interval()).toHaveValue('3600 s');
 
       // Styles compares all six definitions without changing the selected style or preferences.
       const saved = readFileSync(settingsFile);

@@ -272,7 +272,7 @@ test('3.5インチの全Styleと反転で機器用PNGだけを8点移動し、Lo
   } finally {
     await page.close().catch(() => undefined);
     await server?.stop();
-    rmSync(dataDir, { recursive: true, force: true });
+    rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     rmSync(isolated.home, { recursive: true, force: true });
   }
 });

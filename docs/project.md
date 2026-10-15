@@ -119,7 +119,7 @@ mise を使う場合は、`mise install` で `mise.toml` の版のツールを�
 | インストーラーの作成 | `node scripts/run.mjs package` | `bin\token-monitor-turzx-<版>-amd64-setup.exe` ができます。版は `build/app.json` の `version` です。リリースの版はタグで決まるため、`build/app.json` の `version` は上げません |
 | リリース | `mise run release:tag`（版を指定するときは `mise run release:tag 1.2.0`） | 最新のタグ（タグがなければ `build/app.json` の `version`）の patch を1つ上げた `v<版>` のタグを、指定したときはその版のタグを push します。コミットしていない変更がない状態で、`origin/main` に含まれるコミットで実行します。push したタグで CI が検証、インストーラーの作成、`update.json` の署名、GitHub Releases の最新リリースへの公開を行い、各 PC のアプリが次の起動時に新版として取得します |
 
-3.5インチの実処理確認では、保存済みの実Hub接続設定を監査用ディレクトリへ複製し、`WAILS_DATA_DIR`に指定してデスクトップアプリを起動します。`Output`で対応機器を、`Style`で4種類の3.5インチ標準スタイルを手動で選択します。反転、Service content、個別枠、Cycleを操作し、実機と正立したプレビューを比較します。再起動後は設定が復元され、先頭ページから再開することを確認します。監査の自動操作は前述のPlaywright CLIでWebView2へ接続して行います。接続失敗でも実データ取得を維持し、固定データへの切り替えは行いません。仕様確認用の固定データ・メモリ設定の合成点は実処理経路から削除しています。
+3.5インチの実処理確認では、保存済みの実Hub接続設定を監査用ディレクトリへ複製し、`WAILS_DATA_DIR`に指定してデスクトップアプリを起動します。`Output`で対応機器を、`Style`で4種類の3.5インチ標準スタイルを手動で選択します。反転、Service content、個別枠、Page intervalを操作し、実機と正立したプレビューを比較します。再起動後は設定が復元され、先頭ページから再開することを確認します。監査の自動操作は前述のPlaywright CLIでWebView2へ接続して行います。接続失敗でも実データ取得を維持し、固定データへの切り替えは行いません。仕様確認用の固定データ・メモリ設定の合成点は実処理経路から削除しています。
 
 デスクトップ版のビルドとインストーラーの作成では、環境変数 `BUILD_APP_VERSION`・`BUILD_UPDATE_SOURCE`・`BUILD_UPDATE_PUBLIC_KEY` を指定すると、版番号・更新元・公開鍵を、`build/app.json` の代わりにその値にします（指定しない項目は `build/app.json` の値のまま）。値はビルド時に実行ファイルへ埋め込み、実行時の環境変数では変わりません。リリースの CI は `BUILD_APP_VERSION` だけをタグの版にし、更新の E2E は3つとも指定して、手元の更新元を使う版を作ります。
 
