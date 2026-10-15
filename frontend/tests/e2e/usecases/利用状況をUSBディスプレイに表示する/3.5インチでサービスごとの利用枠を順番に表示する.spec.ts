@@ -7,6 +7,7 @@ import type { View } from '../../../../bindings/token-monitor-turzx/internal/set
 import { startServer } from '../../support/server';
 import { startHub } from '../../support/hub';
 import { localHome } from '../../support/local';
+import { checkPNGShift } from '../../support/shift';
 
 // A distinct hardware suffix keeps this saved selection disconnected when the real device is plugged in.
 const smallID = 'USB\\VID_1A86&PID_5722&E2E\\USB35INCHIPSV2';
@@ -119,20 +120,8 @@ test('3.5インチのスタイル、サービス別巡回、スキップと保�
       await page.getByRole('switch', { name: 'Rotate 180°', exact: true }).click();
       await expect.poll(() => file().presentation.reverse180).toBe(true);
       await expect.poll(() => completed?.request.reverse180).toBe(true);
-      // Both images come from the same Canvas. Every sampled device pixel is the opposite preview pixel.
-      const differences = await page.evaluate(async ({ png, device }) => {
-        const read = async (encoded: string) => {
-          const image = new Image(); image.src = `data:image/png;base64,${encoded}`; await image.decode();
-          const canvas = document.createElement('canvas'); canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
-          const ctx = canvas.getContext('2d')!; ctx.drawImage(image, 0, 0); return { width: canvas.width, height: canvas.height, pixels: ctx.getImageData(0, 0, canvas.width, canvas.height).data };
-        };
-        const a = await read(png); const b = await read(device); let differences = 0;
-        for (let y = 0; y < a.height; y += 7) for (let x = 0; x < a.width; x += 11) for (let c = 0; c < 4; c++) {
-          if (a.pixels[(y * a.width + x) * 4 + c] !== b.pixels[((a.height - 1 - y) * a.width + a.width - 1 - x) * 4 + c]) differences++;
-        }
-        return differences;
-      }, completed!);
-      expect(differences).toBe(0);
+      // Device rotation follows the current burn-in offset; the preview stays upright and unshifted.
+      await checkPNGShift(page, [completed!]);
     });
     await test.step('手順3', async () => {
       hub.send('snapshot', stats());

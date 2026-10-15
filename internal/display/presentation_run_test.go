@@ -17,7 +17,13 @@ import (
 // The real scheduler and Canvas boundary run together; only the browser's encoded pixels are supplied.
 func serviceRunner(t *testing.T, config Configuration, delay ...func() time.Duration) (*Service, chan FrameRequest, func(func(*Configuration))) {
 	t.Helper()
+	return serviceRunnerWithShift(t, config, 0, delay...)
+}
+
+func serviceRunnerWithShift(t *testing.T, config Configuration, shift time.Duration, delay ...func() time.Duration) (*Service, chan FrameRequest, func(func(*Configuration))) {
+	t.Helper()
 	s := canvasService()
+	s.ShiftEvery = shift
 	s.State = usage.NewState()
 	s.State.SetSource(config.Source)
 	s.Hidden = func() ([]string, error) { return nil, nil }
