@@ -47,6 +47,10 @@ func DisplayConfiguration(s *Service) (display.Configuration, error) {
 	if err != nil {
 		return display.Configuration{}, err
 	}
+	saved, err = s.reconcileStyle(saved, devices)
+	if err != nil {
+		return display.Configuration{}, err
+	}
 	theme, exists := s.themes[themeID(saved.LimitStyle)]
 	if !exists {
 		return display.Configuration{}, fault.New("STYLE_UNAVAILABLE", "The selected style is unavailable.")

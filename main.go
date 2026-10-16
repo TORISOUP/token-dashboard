@@ -129,6 +129,10 @@ func run() error {
 	}
 	updateService := updates.New(updateConfig, state, logger, emit, updates.LaunchInstaller, controls.ApproveQuit)
 	usageState := usage.NewState()
+	styleMock := startStyleMock(settingsService, usageState)
+	if styleMock {
+		logger.Info("style_selection_mock", "storage", "memory", "source", "fixed")
+	}
 	displayService := &display.Service{State: usageState, Logger: logger, Cycle: func() (bool, time.Duration) {
 		on, seconds := settings.CycleSetting(settingsService)
 		return on, cycleEvery(seconds)
@@ -194,7 +198,9 @@ func run() error {
 	if serverMode {
 		idleAfter = func() int { return math.MaxInt32 }
 	}
-	go presence.Watch(ctx, conditions, idleAfter)
+	if !styleMock {
+		go presence.Watch(ctx, conditions, idleAfter)
+	}
 	sourceChanged := make(chan struct{}, 1)
 	settingsService.OnSaved = func() {
 		select {
@@ -203,7 +209,9 @@ func run() error {
 		}
 	}
 	go display.RunPresentation(ctx, displayService, renderer, redrawInterval(), sink, emit)
-	go runUsageSource(ctx, settingsService, usageState, logger, sourceChanged, dir)
+	if !styleMock {
+		go runUsageSource(ctx, settingsService, usageState, logger, sourceChanged, dir)
+	}
 	updateReady := func(string) {}
 	if !serverMode {
 		// The app lives in the task tray. Closing the window only hides it.

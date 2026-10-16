@@ -62,7 +62,7 @@ export function StyleSelect() {
   const compatible = new Set(draft.saved.compatibleThemeIDs ?? []);
   const choices = themed ? draft.saved.themes!.filter(theme => compatible.has(theme.id)).map(theme => ({ value: theme.id, label: theme.name })) : ['Gauges', 'Bars'];
   const value = !themed || compatible.has(draft.style) ? draft.style : null;
-  return <Select w={themed ? 360 : 160} maw="100%" miw={0} disabled={draft.saving || settings.isError || choices.length === 0} aria-label="Display style" data={choices} value={value} allowDeselect={false} error={draft.fields.limitStyle}
+  return <Select w={themed ? 360 : 160} maw="100%" miw={0} classNames={{ input: styles.styleInput }} disabled={draft.saving || settings.isError || choices.length === 0} aria-label="Display style" data={choices} value={value} allowDeselect={false} error={draft.fields.limitStyle}
     placeholder={choices.length ? 'Select a compatible style' : 'No compatible styles'}
     onChange={value => { if (value) draft.setStyle(value); }} />;
 }
