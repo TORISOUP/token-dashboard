@@ -14,6 +14,55 @@ func ConfigureDisplay(s *Service, themes map[string]display.Theme) {
 	s.themes, s.generation = themes, 1
 }
 
+// ConfigureCatalog supplies committed external definitions using the same selection lock.
+func ConfigureCatalog(s *Service, catalog func(string) (map[string]display.Theme, error)) {
+	s.catalog = catalog
+}
+
+func (s *Service) loadThemes(selected string) error {
+	if s.catalog == nil {
+		return nil
+	}
+	themes, err := s.catalog(selected)
+	if err == nil {
+		s.themes = themes
+	}
+	return err
+}
+
+// DeleteStyle serializes the selection check and disk removal with Save.
+// The removal callback takes the style lock after this settings lock.
+func DeleteStyle(s *Service, id string, remove func() error) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	saved, _, err := s.read()
+	if err != nil {
+		return err
+	}
+	if themeID(saved.LimitStyle) == id {
+		return fault.New("IN_USE", "Switch to another style before deleting.")
+	}
+	return remove()
+}
+
+// DisplayTheme resolves metadata without changing the page cursor or settings generation.
+func DisplayTheme(s *Service, id string) (display.Theme, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	saved, _, err := s.read()
+	if err != nil {
+		return display.Theme{}, err
+	}
+	if err := s.loadThemes(themeID(saved.LimitStyle)); err != nil {
+		return display.Theme{}, err
+	}
+	theme, exists := s.themes[id]
+	if !exists {
+		return display.Theme{}, fault.New("STYLE_UNAVAILABLE", "This style is unavailable.")
+	}
+	return theme, nil
+}
+
 func presentationOf(saved file) *display.Presentation {
 	if saved.Presentation == nil {
 		return &display.Presentation{Services: map[string]map[string]display.ServiceContent{}}
@@ -41,6 +90,9 @@ func DisplayConfiguration(s *Service) (display.Configuration, error) {
 	defer s.mu.Unlock()
 	saved, _, err := s.read()
 	if err != nil {
+		return display.Configuration{}, err
+	}
+	if err := s.loadThemes(themeID(saved.LimitStyle)); err != nil {
 		return display.Configuration{}, err
 	}
 	devices, err := s.list()

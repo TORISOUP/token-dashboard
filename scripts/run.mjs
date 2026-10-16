@@ -73,9 +73,7 @@ try {
     console.log('node scripts/run.mjs setup | dev | build | package | server | verify | test:core | test:desktop | tag [version] | release <args> | site');
   } else {
     if (!existsSync(cli)) throw new Error('先に node scripts/run.mjs setup を実行してください。');
-    if (command === 'preview:style-import') {
-      run(process.execPath, ['scripts/mock-style-import.mjs']);
-    } else if (command === 'dev') {
+    if (command === 'dev') {
       if (!windows) throw new Error('Desktop development is Windows-only. Use server for browser verification.');
       // Not the Wails default 9245, which other Wails projects on this PC also use.
       run(cli, ['dev', '-port', '9345'], root);

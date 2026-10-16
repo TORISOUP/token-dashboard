@@ -28,6 +28,7 @@ type Service struct {
 	// ShiftEvery is how long the image for the TURZX stays at one offset; zero means 3 minutes.
 	ShiftEvery    time.Duration
 	Themes        map[string]Theme
+	Theme         func(string) (Theme, error)
 	Configuration func() (Configuration, error)
 
 	mu        sync.Mutex

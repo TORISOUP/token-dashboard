@@ -29,6 +29,12 @@ func (s *Service) ThemePreview(id string) (ThemeData, error) {
 		return ThemeData{}, err
 	}
 	config := Configuration{Source: source, Theme: s.Themes[id]}
+	if s.Theme != nil {
+		config.Theme, err = s.Theme(id)
+		if err != nil {
+			return ThemeData{}, err
+		}
+	}
 	if s.Configuration != nil {
 		selected, err := s.Configuration()
 		if err != nil {

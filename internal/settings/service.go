@@ -128,6 +128,7 @@ type Service struct {
 	awayMinutes int
 	themes      map[string]display.Theme
 	generation  uint64
+	catalog     func(string) (map[string]display.Theme, error)
 }
 
 func New(path, appID string, list func() ([]turzx.Device, error), logger *slog.Logger) *Service {
@@ -140,6 +141,9 @@ func (s *Service) Get() (view View, err error) {
 	defer s.mu.Unlock()
 	saved, conn, err := s.read()
 	if err != nil {
+		return View{}, err
+	}
+	if err := s.loadThemes(themeID(saved.LimitStyle)); err != nil {
 		return View{}, err
 	}
 	devices, err := s.list()
@@ -191,6 +195,9 @@ func (s *Service) Save(req SaveRequest) (view View, err error) {
 	defer s.mu.Unlock()
 	saved, conn, err := s.read()
 	if err != nil {
+		return View{}, err
+	}
+	if err := s.loadThemes(""); err != nil {
 		return View{}, err
 	}
 	before := conn
@@ -275,6 +282,9 @@ func (s *Service) Save(req SaveRequest) (view View, err error) {
 	}
 	if len(fields) > 0 {
 		return View{}, fault.Validation(fields)
+	}
+	if err := s.loadThemes(themeID(next.LimitStyle)); err != nil {
+		return View{}, err
 	}
 	next, err = s.compatibleStyle(next, devices)
 	if err != nil {

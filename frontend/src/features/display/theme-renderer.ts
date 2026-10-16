@@ -1,7 +1,7 @@
 import Handlebars from 'handlebars/runtime';
 import HandlebarsCompiler from 'handlebars';
 import { Events } from '@wailsio/runtime';
-import { Display } from '../application/style-import-services';
+import * as Display from '@bindings/token-monitor-turzx/internal/display/service';
 import { invalidateStyleCatalog, loadStyleCatalog } from '../styles/catalog';
 import type { FrameRequest, ThemeData } from '@bindings/token-monitor-turzx/internal/display/models';
 import { reportFrontendError } from '../application/queries';
@@ -29,6 +29,7 @@ const themes = new Map(Object.entries(manifests).map(([path, manifest]) => {
 }));
 
 export function registerTheme(id: string, template: string, stylesheet: string, width: number, height: number, dataLayout: string) {
+  HandlebarsCompiler.parse(template);
   themes.set(id, {
     template: HandlebarsCompiler.compile<ThemeData>(template, { strict: true }),
     stylesheet,

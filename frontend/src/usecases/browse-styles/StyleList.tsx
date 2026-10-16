@@ -6,7 +6,6 @@ import { getSettings } from '../../features/settings/queries';
 import { compiledStyles, loadStyleCatalog, type StyleDefinition } from '../../features/styles/catalog';
 import { DeleteStyle } from '../delete-style/DeleteStyle';
 import { ErrorNotice } from '../../shared/ErrorNotice';
-import { Events } from '@wailsio/runtime';
 
 const legacyBuiltins = [
   { id: 'gauges', name: 'Gauges', builtin: true },
@@ -16,9 +15,10 @@ const compiled = compiledStyles();
 const builtinIds = new Set(compiled.map(style => style.id));
 
 function styleCards(catalog: StyleDefinition[], presentation: boolean) {
-  const builtins = presentation ? [...legacyBuiltins, ...compiled.filter(style => !legacyBuiltins.some(legacy => legacy.id === style.id)).map(style => ({ ...style, builtin: true }))] : legacyBuiltins;
+  const order = (a: StyleDefinition, b: StyleDefinition) => a.name < b.name ? -1 : a.name > b.name ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+  const builtins = presentation ? [...legacyBuiltins, ...compiled.filter(style => !legacyBuiltins.some(legacy => legacy.id === style.id)).sort(order).map(style => ({ ...style, builtin: true }))] : legacyBuiltins;
   const extras = catalog.filter(style => !builtinIds.has(style.id))
-    .sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+    .sort(order)
     .map(style => ({ ...style, builtin: false }));
   return [...builtins, ...extras];
 }
@@ -34,10 +34,7 @@ export function StyleList() {
   const [revision, setRevision] = useState(0);
   const [images, setImages] = useState<Record<string, string>>({});
   const [failures, setFailures] = useState<Record<string, string>>({});
-  const refreshCatalog = catalog.refetch;
-  const refreshSettings = settings.refetch;
   useEffect(() => subscribeThemeData(() => setRevision(value => value + 1)), []);
-  useEffect(() => Events.On('styles:changed', () => { void refreshCatalog(); void refreshSettings(); }), [refreshCatalog, refreshSettings]);
   useEffect(() => {
     let cancel = false;
     const current = cards;

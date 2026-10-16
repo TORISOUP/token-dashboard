@@ -142,6 +142,13 @@ func run() error {
 		return err
 	}
 	settings.ConfigureDisplay(settingsService, displayService.Themes)
+	styles.Configure(styleService, displayService.Themes, func(id string, remove func() error) error {
+		return settings.DeleteStyle(settingsService, id, remove)
+	}, func() { emit("styles:changed", nil) })
+	settings.ConfigureCatalog(settingsService, func(selected string) (map[string]display.Theme, error) {
+		return styles.Catalog(styleService, selected)
+	})
+	displayService.Theme = func(id string) (display.Theme, error) { return settings.DisplayTheme(settingsService, id) }
 	displayService.Configuration = func() (display.Configuration, error) {
 		config, err := settings.DisplayConfiguration(settingsService)
 		config.CycleEvery = cycleEvery(config.CycleSeconds)

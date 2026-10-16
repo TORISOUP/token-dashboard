@@ -1,4 +1,6 @@
-import { Application, Display, Styles } from '../application/style-import-services';
+import * as Application from '@bindings/token-monitor-turzx/internal/desktop/service';
+import * as Display from '@bindings/token-monitor-turzx/internal/display/service';
+import * as Styles from '@bindings/token-monitor-turzx/internal/styles/service';
 import { registerTheme, unregisterTheme } from '../display/theme-renderer';
 import { prepareTheme, type ThemeFiles } from './prepare';
 
@@ -9,7 +11,9 @@ type Manifest = { id?: string; name?: string };
 const manifests = import.meta.glob<Manifest>(['../../../../themes/*/theme.json', '../../../../themes/services/*/theme.json'], { eager: true, import: 'default' });
 const invalid = { code: 'INVALID', message: 'This folder is not a valid style.' };
 let loading: Promise<StyleDefinition[]> | undefined;
-export function invalidateStyleCatalog() { loading = undefined; }
+let revision = 0;
+let registered = new Set<string>();
+export function invalidateStyleCatalog() { revision++; loading = undefined; }
 
 function definitions(value: unknown): StyleDefinition[] {
   if (!Array.isArray(value)) throw new Error('Style catalog is unavailable');
@@ -48,16 +52,25 @@ export async function deleteStyle(id: string): Promise<void> {
 }
 
 export function loadStyleCatalog(): Promise<StyleDefinition[]> {
-  return loading ??= readStyleCatalog().catch(error => { loading = undefined; throw error; });
+  if (!loading) {
+    const current = revision;
+    loading = readStyleCatalog(current).catch(error => { if (current === revision) loading = undefined; throw error; });
+  }
+  return loading;
 }
 
-async function readStyleCatalog(): Promise<StyleDefinition[]> {
+async function readStyleCatalog(current: number): Promise<StyleDefinition[]> {
   const compiled = compiledStyles();
   const stored = (await Styles.List()) ?? [];
-  const added: StyleDefinition[] = [];
-  for (const style of stored) added.push(await registerStored(style));
+  const icons = stored.length ? await Display.AgentIcons() : {};
+  const prepared = stored.map(style => prepareTheme(style, icons));
+  if (current !== revision) return loadStyleCatalog();
+  const next = new Set(prepared.map(style => style.id));
+  for (const id of registered) if (!next.has(id)) unregisterTheme(id);
+  for (const style of prepared) registerTheme(style.id, style.template, style.stylesheet, style.width, style.height, style.dataLayout);
+  registered = next;
   const seen = new Set(compiled.map(style => style.id));
-  return [...compiled, ...added.filter(style => !seen.has(style.id))];
+  return [...compiled, ...prepared.filter(style => !seen.has(style.id)).map(({ id, name }) => ({ id, name }))];
 }
 
 export async function importStyleFolder(): Promise<void> {
