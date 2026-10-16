@@ -115,7 +115,7 @@ mise を使う場合は、`mise install` で `mise.toml` の版のツールを�
 | TURZX 実機の列挙 | `$env:TURZX_DEVICE_TEST='1'; go test -run TestListConnected -v ./internal/turzx` | 接続中の TURZX が `TURZX1.0 (633A6E01)` の形式の表示名で列挙されます。TURZX を接続した PC で手動で実行します |
 | 文書検査 | `python scripts/doc_check.py .` | NG が0件です |
 | 更新の E2E | `node scripts/run.mjs test:desktop` | 「起動時に取得した新版で更新して再起動する」の E2E が合格します。v0.1.0 と v0.2.0 のインストーラーを作り、実際にインストールして更新し、最後にアンインストールします。動いている Token Dashboard をすべて止め、インストールしていない状態で、手元で実行します。`verify` には含めません |
-| Styleを追加する E2E | `$env:STYLE_E2E='1'; npm --prefix frontend run test:e2e -- --grep Styleを追加する` | 「Styleを追加する」の E2E が合格します。`bin\token-monitor-turzx.exe` の開発ビルドを、一時データフォルダーで起動し、フォルダー選択ダイアログを操作します。動いている Token Dashboard を止めてから手元で実行します。`verify` には含めません |
+| Styleを追加する E2E | `node scripts/run.mjs test:styles` | Windows上でサーバー版・開発版をビルドし、ネイティブのフォルダー選択、4サンプルと9.2インチ旧形式の取り込み・適用・再起動を検証します。一時データフォルダーと切断済みの機器識別子を使います。動いている Token Dashboard を止めてから実行します。`verify`には含めません |
 | インストーラーの作成 | `node scripts/run.mjs package` | `bin\token-monitor-turzx-<版>-amd64-setup.exe` ができます。版は `build/app.json` の `version` です。リリースの版はタグで決まるため、`build/app.json` の `version` は上げません |
 | リリース | `mise run release:tag`（版を指定するときは `mise run release:tag 1.2.0`） | 最新のタグ（タグがなければ `build/app.json` の `version`）の patch を1つ上げた `v<版>` のタグを、指定したときはその版のタグを push します。コミットしていない変更がない状態で、`origin/main` に含まれるコミットで実行します。push したタグで CI が検証、インストーラーの作成、`update.json` の署名、GitHub Releases の最新リリースへの公開を行い、各 PC のアプリが次の起動時に新版として取得します |
 

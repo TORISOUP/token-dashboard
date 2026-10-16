@@ -68,6 +68,29 @@ test('追加した表示スタイルを1つアプリの定義から取り除く'
       await page.goto(`${server.url}/#/styles`);
       await expect.poll(() => names(page)).toEqual(['Gauges', 'Bars', 'Bars 3.5" Landscape', 'Bars 3.5" Portrait', 'Gauges 3.5" Landscape', 'Gauges 3.5" Portrait', 'Dawn']);
       await expect(page.getByRole('article', { name: 'Gauges' }).getByText('In use', { exact: true })).toBeVisible();
+      await page.getByRole('link', { name: 'Display', exact: true }).click();
+      await page.getByRole('textbox', { name: 'Display style', exact: true }).click();
+      await expect(page.getByRole('option', { name: 'Night', exact: true })).toHaveCount(0);
+      await expect(page.getByRole('option', { name: 'Dawn', exact: true })).toBeVisible();
+      await page.keyboard.press('Escape');
+      await page.getByRole('link', { name: 'Styles', exact: true }).click();
+      await page.getByRole('button', { name: 'Delete Dawn', exact: true }).click();
+      // A second client selects the style while its deletion confirmation is open.
+      await page.evaluate(async request => {
+        const response = await fetch('/wails/runtime', { method: 'POST', body: JSON.stringify({ object: 0, method: 0,
+          args: { 'call-id': crypto.randomUUID(), methodName: 'token-monitor-turzx/internal/settings.Service.Save', args: [request] },
+        }) });
+        if (!response.ok) throw new Error(await response.text());
+      }, { source: 'Local', displayID: JSON.parse(settings).displayID, limitStyle: 'dawn' });
+      const selected = readFileSync(join(dataDir, 'settings.json'), 'utf8');
+      await page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true }).click();
+      await expect(page.getByRole('alert', { name: 'IN_USE' })).toContainText('Switch to another style before deleting.');
+      expect(kept(dataDir)).toEqual(['dawn']);
+      expect(readFileSync(join(dataDir, 'settings.json'), 'utf8')).toBe(selected);
+      await page.getByRole('link', { name: 'Display', exact: true }).click();
+      await expect(page.getByRole('textbox', { name: 'Display style', exact: true })).toHaveValue('Dawn');
+      await page.getByRole('link', { name: 'Styles', exact: true }).click();
+      await expect(page.getByRole('button', { name: 'Delete Dawn', exact: true })).toBeDisabled();
     });
   } finally {
     await server.stop();
