@@ -1,7 +1,5 @@
-import * as Application from '@bindings/token-monitor-turzx/internal/desktop/service';
-import * as Display from '@bindings/token-monitor-turzx/internal/display/service';
-import * as Styles from '@bindings/token-monitor-turzx/internal/styles/service';
-import { registerTheme } from '../display/theme-renderer';
+import { Application, Display, Styles } from '../application/style-import-services';
+import { registerTheme, unregisterTheme } from '../display/theme-renderer';
 import { prepareTheme, type ThemeFiles } from './prepare';
 
 export type StyleDefinition = { id: string; name: string };
@@ -10,6 +8,8 @@ type Manifest = { id?: string; name?: string };
 
 const manifests = import.meta.glob<Manifest>(['../../../../themes/*/theme.json', '../../../../themes/services/*/theme.json'], { eager: true, import: 'default' });
 const invalid = { code: 'INVALID', message: 'This folder is not a valid style.' };
+let loading: Promise<StyleDefinition[]> | undefined;
+export function invalidateStyleCatalog() { loading = undefined; }
 
 function definitions(value: unknown): StyleDefinition[] {
   if (!Array.isArray(value)) throw new Error('Style catalog is unavailable');
@@ -37,15 +37,21 @@ function isFault(error: unknown): boolean {
 async function registerStored(value: ThemeFiles) {
   const icons = await Display.AgentIcons();
   const prepared = prepareTheme(value, icons);
-  registerTheme(prepared.id, prepared.template, prepared.stylesheet);
+  registerTheme(prepared.id, prepared.template, prepared.stylesheet, prepared.width, prepared.height, prepared.dataLayout);
   return { id: prepared.id, name: prepared.name };
 }
 
 export async function deleteStyle(id: string): Promise<void> {
   await Styles.Delete(id);
+  unregisterTheme(id);
+  invalidateStyleCatalog();
 }
 
-export async function loadStyleCatalog(): Promise<StyleDefinition[]> {
+export function loadStyleCatalog(): Promise<StyleDefinition[]> {
+  return loading ??= readStyleCatalog().catch(error => { loading = undefined; throw error; });
+}
+
+async function readStyleCatalog(): Promise<StyleDefinition[]> {
   const compiled = compiledStyles();
   const stored = (await Styles.List()) ?? [];
   const added: StyleDefinition[] = [];
@@ -61,8 +67,10 @@ export async function importStyleFolder(): Promise<void> {
   try {
     await registerStored(draft);
     await Styles.FinishImport(draft.token);
+    invalidateStyleCatalog();
   } catch (error) {
     await Styles.CancelImport(draft.token);
+    unregisterTheme(draft.id);
     if (isFault(error)) throw error;
     throw invalid;
   }

@@ -25,23 +25,30 @@ type manifest struct {
 	Name          string `json:"name"`
 	Width         int    `json:"width"`
 	Height        int    `json:"height"`
+	DataLayout    string `json:"dataLayout"`
 	Template      string `json:"template"`
 	Stylesheet    string `json:"stylesheet"`
 }
 
 // ImportDraft is a checked copy that is not yet part of the definitions.
 type ImportDraft struct {
-	Token string            `json:"token"`
-	ID    string            `json:"id"`
-	Name  string            `json:"name"`
-	Files map[string]string `json:"files"`
+	Width      int               `json:"width"`
+	Height     int               `json:"height"`
+	DataLayout string            `json:"dataLayout"`
+	Token      string            `json:"token"`
+	ID         string            `json:"id"`
+	Name       string            `json:"name"`
+	Files      map[string]string `json:"files"`
 }
 
 // StoredStyle is one style already in the app.
 type StoredStyle struct {
-	ID    string            `json:"id"`
-	Name  string            `json:"name"`
-	Files map[string]string `json:"files"`
+	Width      int               `json:"width"`
+	Height     int               `json:"height"`
+	DataLayout string            `json:"dataLayout"`
+	ID         string            `json:"id"`
+	Name       string            `json:"name"`
+	Files      map[string]string `json:"files"`
 }
 
 type staged struct {
@@ -113,7 +120,7 @@ func (s *Service) BeginImport(folder string, definedIDs []string) (draft ImportD
 		return ImportDraft{}, s.copyFailed(err)
 	}
 	s.staged[token] = staged{id: manifest.ID, dir: dir}
-	return ImportDraft{Token: token, ID: manifest.ID, Name: manifest.Name, Files: files}, nil
+	return ImportDraft{Token: token, ID: manifest.ID, Name: manifest.Name, Width: manifest.Width, Height: manifest.Height, DataLayout: manifest.DataLayout, Files: files}, nil
 }
 
 // FinishImport moves a checked copy into the definitions.
@@ -211,7 +218,7 @@ func (s *Service) List() ([]StoredStyle, error) {
 		if err != nil {
 			return nil, s.copyFailed(err)
 		}
-		list = append(list, StoredStyle{ID: manifest.ID, Name: manifest.Name, Files: files})
+		list = append(list, StoredStyle{ID: manifest.ID, Name: manifest.Name, Width: manifest.Width, Height: manifest.Height, DataLayout: manifest.DataLayout, Files: files})
 	}
 	return list, nil
 }

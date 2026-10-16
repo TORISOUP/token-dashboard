@@ -1,6 +1,6 @@
 import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Events } from '@wailsio/runtime';
-import * as Display from '@bindings/token-monitor-turzx/internal/display/service';
+import { Display } from '../application/style-import-services';
 
 export const previewKey = ['display', 'preview'] as const;
 export const getPreview = () => queryOptions({ queryKey: previewKey, queryFn: () => Display.Preview() });

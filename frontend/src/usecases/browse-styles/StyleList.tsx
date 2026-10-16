@@ -6,6 +6,7 @@ import { getSettings } from '../../features/settings/queries';
 import { compiledStyles, loadStyleCatalog, type StyleDefinition } from '../../features/styles/catalog';
 import { DeleteStyle } from '../delete-style/DeleteStyle';
 import { ErrorNotice } from '../../shared/ErrorNotice';
+import { Events } from '@wailsio/runtime';
 
 const legacyBuiltins = [
   { id: 'gauges', name: 'Gauges', builtin: true },
@@ -33,7 +34,10 @@ export function StyleList() {
   const [revision, setRevision] = useState(0);
   const [images, setImages] = useState<Record<string, string>>({});
   const [failures, setFailures] = useState<Record<string, string>>({});
+  const refreshCatalog = catalog.refetch;
+  const refreshSettings = settings.refetch;
   useEffect(() => subscribeThemeData(() => setRevision(value => value + 1)), []);
+  useEffect(() => Events.On('styles:changed', () => { void refreshCatalog(); void refreshSettings(); }), [refreshCatalog, refreshSettings]);
   useEffect(() => {
     let cancel = false;
     const current = cards;
@@ -66,7 +70,7 @@ export function StyleList() {
         {card.builtin && <Badge variant="light" color="gray" tt="none">Built-in</Badge>}
         {card.id === selectedID && <Badge variant="light" tt="none">In use</Badge>}
         </Group>
-        {!card.builtin && <DeleteStyle style={card} />}
+        {!card.builtin && <DeleteStyle style={card} active={card.id === selectedID} />}
       </Group>
       {images[card.id]
         ? <Image src={images[card.id]} alt={`${card.name} preview`} radius="sm" fit="contain" style={{ width: '100%', maxHeight: 360, objectFit: 'contain' }} />

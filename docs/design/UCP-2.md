@@ -5,7 +5,7 @@
 | 役割 | 責務 | 実装パス（段階4完了時に記入） |
 | --- | --- | --- |
 | 設定区画 | 取得元と表示先、選択肢、表示設定を表示する。表示先とスタイルを手動選択でき、不適合なスタイルは既定へ補正する。サービス表示の操作は[対象シナリオ](../usecases/利用状況をUSBディスプレイに表示する/scenarios/3.5インチでサービスごとの利用枠を順番に表示する.md)に従う。9.2インチ用の`Cycle`・`Cycle time`と機種共通の`Away time`は`Settings`画面で編集し、3.5インチ用の`Page interval`は`Display`のStyle区画で編集する。表示設定は保存成功後に反映し、失敗したら選択を戻してエラーを表示する。取得元と接続先の入力は`Connection`画面で保存まで保持し、`Save`で保存する。Hub選択時だけ接続先の入力を表示し、認証トークンは入力だけを受けて表示しない | `frontend/src/usecases/configure-hub/ConfigureHub.tsx`、`frontend/src/usecases/configure-hub/SettingsDraft.tsx`、`frontend/src/usecases/show-usage/UsagePreview.tsx`、`frontend/src/routes/settings.tsx`、`frontend/src/app/Shell.tsx` |
-| 機能アクセス | 本体の設定サービスを呼び出し、取得結果と保存結果を画面の状態へ反映する | `frontend/src/features/settings/queries.ts` |
+| 機能アクセス | 本体の設定サービスを呼び出し、取得結果と保存結果を画面へ反映する。外部スタイルの追加・削除の確定通知で候補を再取得し、Styles画面を開かなくても追加スタイルを復元する | `frontend/src/features/settings/queries.ts` |
 | 設定サービス | 取得元、表示先、スタイル、表示設定を検証し、1操作を1回のファイル置き換えで確定する。サービス設定は取得元別に保持し、個別枠の選択から独立させる。表示設定の保存成功を描画へ通知し、ページと巡回期限への反映は対象シナリオに従う。スタイルの識別と表示先との適合性は[共通契約](../architecture.md#style-contract)と[設計上の制約](../architecture.md#design-constraints)に従う。Hub選択時は接続先URLと認証トークンを1組でDPAPIにより暗号化し、画面へは設定有無だけを返す。取得元または接続設定が変わったときだけ取得元の再評価を通知し、表示設定の変更では取得を止めない | `internal/settings/service.go`、`internal/settings/dpapi_windows.go` |
 | 取得元切替 | 保存済みの取得元を読み、従前の取得処理を停止して選択した取得処理を起動する。ローカル取得は同梱の tokscale の結果を表示用の最新状態へ変換する | `main.go`、`internal/localusage/reader.go`、`internal/hub/receiver.go` |
 | TURZX 列挙 | 対応する接続機器を列挙し、機器の識別子と識別できる表示名を返す。機種の判別は通信方式、対応寸法、既定スタイルの選択に使う。未接続の明示選択は保持する | `internal/turzx/devices.go`、`internal/turzx/devices_windows.go` |

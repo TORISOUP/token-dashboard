@@ -37,8 +37,8 @@
 | [利用状況をUSBディスプレイに表示する](usecases/利用状況をUSBディスプレイに表示する/README.md) | 利用者 | 選択した取得元の最新のトークン数・推定コストと利用枠を、TURZX とプレビューに常時表示する | 2 | [UCP-1](design/UCP-1.md)、[UCP-2](design/UCP-2.md) | 対象 |
 | [新版を確認してアプリを更新する](usecases/新版を確認してアプリを更新する/README.md) | 利用者 | 起動時にバックグラウンドで GitHub Releases の新版を検出し、利用者の確認後にアプリを更新する | 3 | [UCP-3](design/UCP-3.md) | 対象 |
 | [Style一覧を閲覧する](usecases/Style一覧を閲覧する/README.md) | 利用者 | アプリに定義された表示スタイルを、現在の表示を変えずに見比べる | 4 | [UCP-1](design/UCP-1.md) | 対象 |
-| [Styleを追加する](usecases/Styleを追加する/README.md) | テーマ作者 | 組み込み以外の表示スタイルを1つアプリの定義に加える | 5 | [UCP-1](design/UCP-1.md) | 対象 |
-| [Styleを削除する](usecases/Styleを削除する/README.md) | テーマ作者 | 追加した表示スタイルを1つアプリの定義から取り除く | 6 | [UCP-1](design/UCP-1.md) | 対象 |
+| [Styleを追加する](usecases/Styleを追加する/README.md) | テーマ作者 | 組み込み以外の表示スタイルをアプリの定義に加え、対応する表示先で使用する | 5 | [UCP-1](design/UCP-1.md)、[UCP-2](design/UCP-2.md) | 対象 |
+| [Styleを削除する](usecases/Styleを削除する/README.md) | テーマ作者 | 追加した表示スタイルを1つアプリの定義から取り除く | 6 | [UCP-1](design/UCP-1.md)、[UCP-2](design/UCP-2.md) | 対象 |
 | [USBディスプレイの焼き付きを防ぐ](usecases/USBディスプレイの焼き付きを防ぐ/README.md) | 利用者 | TURZX の表示位置を少しずつずらし、席を離れている間は消灯して、焼き付き・残像を防ぐ | 7 | [UCP-1](design/UCP-1.md)、[UCP-2](design/UCP-2.md) | 対象 |
 | [設定を編集する](usecases/設定を編集する/README.md) | 利用者 | 9.2インチの表示の切り替えや、機種共通の離席の判定を、Settings画面で編集して保存する | 8 | [UCP-2](design/UCP-2.md) | 対象 |
 
@@ -184,3 +184,16 @@ CycleがOFFでも3.5インチは複数ページを巡回すること、1ペー�
 スタイルや取得元を変更しても専用間隔を保持し、終了・再起動後も両方の間隔が独立して復元されることを確認します。現在ページは先頭から再開します。
 確認後は変更した設定を戻します。終了はタスクトレイのExitを使います。
 通常起動では設定のメモリ保存や利用状況の固定表へ切り替えません。接続や保存の失敗からモックへ切り替えません。
+
+### 外部スタイルの操作確認用モック
+
+`node scripts/run.mjs preview:style-import`でビルドして起動し、`http://127.0.0.1:34139/`を開きます。
+`Styles`の`Add style`はブラウザーの入力ダイアログでサンプルフォルダー名を受けます。
+候補は[サンプルの説明](../examples/styles/README.md)を参照します。
+取り込みと選択の固定応答は`frontend/src/features/application/style-import-services.ts`の1箇所で、本番のAPI型を共有して差し替えます。
+画像生成と巡回は共通処理を使い、Localの取得結果だけは外部CLI境界の固定データです。
+取り込み状態はブラウザーのセッション内、通常の設定は一時ディレクトリー内に限り、USB出力は行いません。
+再読み込みはモックの復元確認に使えますが、実ファイルの永続化とアプリ再起動の確認は実処理接続後に行います。
+終了はCtrl+Cです。タブを閉じるとセッション内の取り込み状態も破棄します。
+通常の`build`・`server`・`verify`では`VITE_STYLE_IMPORT_MOCK`を設定せず、モックを含めません。
+接続失敗を理由にモックへ切り替える処理はありません。

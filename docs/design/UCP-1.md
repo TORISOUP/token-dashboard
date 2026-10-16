@@ -18,8 +18,8 @@
 | プレビュー配信 | 本体の Wails サービス。最新の表示画像を画面へ返し、画像の更新をイベントで通知する | `internal/display/service.go` |
 | プレビュー区画 | ウィンドウで最新の表示画像を表示する。画像を描かず、状態も持たない | `frontend/src/usecases/show-usage/UsagePreview.tsx`、`frontend/src/features/display/queries.ts` |
 | スタイル一覧 | ビルドに含まれるテーマ定義と、アプリ内部に取り込んだ表示スタイルを列挙する。組み込みの Gauges と Bars は常に先に出し、各スタイルで描いたプレビューを見せる。TURZX へ送る画像と、現在の表示に使っているスタイルは変えない | `frontend/src/features/styles/catalog.ts`、`frontend/src/usecases/browse-styles/StyleList.tsx`、`frontend/src/routes/styles.tsx`、`frontend/src/app/Shell.tsx`、`frontend/src/features/display/theme-renderer.ts`、`internal/styles/service.go` |
-| スタイルの取り込み | 指定フォルダーを検査し、合格したファイルだけをアプリ内部の定義置き場へコピーして定義に加える。取消、不合格、識別子の重複、コピー失敗では定義も内部のファイルも変えない | `internal/styles/service.go`、`internal/desktop/service.go`、`frontend/src/usecases/add-style/AddStyle.tsx`、`frontend/src/features/styles/catalog.ts`、`frontend/src/features/styles/prepare.ts` |
-| スタイルの削除 | 追加したスタイルの内部コピーを、`styles` 下の一時名へ移してから削除し、定義から取り除く。組み込みは削除できない。取消と失敗では定義も内部のファイルも変えない。TURZX へ送る画像と、現在の表示に使っているスタイルは変えない | `internal/styles/service.go`、`internal/desktop/service.go`、`frontend/src/usecases/delete-style/DeleteStyle.tsx`、`frontend/src/features/styles/catalog.ts` |
+| スタイルの取り込み | [取り込みシナリオ](../usecases/Styleを追加する/scenarios/Styleを追加する.md)の寸法・表示データ構成を含めて検査し、合格したファイルだけを内部へコピーする。確定済みの定義をメタデータとして保持し、設定取得で素材を読み直さない。本体の共通候補と画面の描画登録へ接続し、起動時にも復元する。取消、不合格、重複、コピー失敗では現在の設定・画像を変更しない | `internal/styles/service.go`、`internal/desktop/service.go`、`frontend/src/usecases/add-style/AddStyle.tsx`、`frontend/src/features/styles/catalog.ts`、`frontend/src/features/styles/prepare.ts` |
+| スタイルの削除 | 追加したスタイルの内部コピーを、`styles` 下の一時名へ移してから削除し、定義から取り除く。組み込みと選択中のスタイルは削除できない。選択の保存と削除の判定・確定は同じ設定ロックで直列化する。取消と失敗では定義も内部のファイルも変えない。TURZXへ送る画像と、現在の表示に使っているスタイルは変えない | `internal/styles/service.go`、`internal/desktop/service.go`、`frontend/src/usecases/delete-style/DeleteStyle.tsx`、`frontend/src/features/styles/catalog.ts` |
 
 ```mermaid
 sequenceDiagram
@@ -46,6 +46,6 @@ sequenceDiagram
 ```
 
 - 整合性: 状態更新の主体は最新状態と、本体が所有する巡回状態 / 結果確定点はメモリ上の最新状態の置き換えと、画像境界の検査に合格した結果の受領 / 障害時は、受信の失敗では最後の最新状態と表示を保ったまま再接続を続け、描画の失敗・応答期限切れでは前回の表示を保ち、次の状態変更または定期更新で再生成する。TURZXの送信失敗では失敗した画像を再送せず、再接続後に最新の画像を送る。いずれも他の処理とアプリを止めない / 境界は、描画を逐次にし、送信は最新の1枚だけで追いつくようにすること。
-- モックの境界: 設定と利用状況の合成点は[UCP-2](UCP-2.md)に従い、通常起動は実処理を使う。サービス表示では巡回ONと専用間隔を共通の`display.Configuration`へ渡し、ページ構成・巡回期限・Canvas描画は共通の実装を使う。失敗による固定値への切り替えはない。Hub経路の既存検証は接続URLを制御可能なSSEサーバーへ向ける。
+- モックの境界: 設定と利用状況の合成点は[UCP-2](UCP-2.md)に従い、通常起動は実処理を使う。外部スタイルの操作確認では`style-import-services.ts`で本番API型を共有した固定応答へ差し替え、共通の素材解決・描画処理を使う。起動と無効化は[実行手順](../project.md#commands)に従う。サービス表示では巡回ONと専用間隔を共通の`display.Configuration`へ渡し、ページ構成・巡回期限・Canvas描画は共通の実装を使う。失敗による固定値への切り替えはない。Hub経路の既存検証は接続URLを制御可能なSSEサーバーへ向ける。
 
-UC 固有の逸脱: 「Style一覧を閲覧する」は、その時点の表示スタイル定義を列挙し、各スタイルで描いたプレビューを一覧に出す。TURZX へ送る画像と、現在の表示に使っているスタイルは変えない。「Styleを追加する」は、指定したフォルダーを検査し、合格したファイルをアプリ内部へコピーして定義を1つ加える。
+UC 固有の逸脱: 「Style一覧を閲覧する」は、その時点の表示スタイル定義を列挙し、各スタイルで描いたプレビューを一覧に出す。TURZX へ送る画像と、現在の表示に使っているスタイルは変えない。「Styleを追加する」は、指定したフォルダーを検査し、確定した内部コピーを本体と画面の候補に加える。適用はDisplayで手動選択し、設定保存はUCP-2に従う。

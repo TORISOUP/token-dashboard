@@ -1,7 +1,8 @@
 import Handlebars from 'handlebars/runtime';
 import HandlebarsCompiler from 'handlebars';
 import { Events } from '@wailsio/runtime';
-import * as Display from '@bindings/token-monitor-turzx/internal/display/service';
+import { Display } from '../application/style-import-services';
+import { invalidateStyleCatalog, loadStyleCatalog } from '../styles/catalog';
 import type { FrameRequest, ThemeData } from '@bindings/token-monitor-turzx/internal/display/models';
 import { reportFrontendError } from '../application/queries';
 
@@ -27,14 +28,16 @@ const themes = new Map(Object.entries(manifests).map(([path, manifest]) => {
   return [manifest.id, { template: Handlebars.template<ThemeData>(specification), stylesheet, shrinkTokens: manifest.dataLayout === 'bars' || manifest.dataLayout?.startsWith('service-') === true, width: manifest.width, height: manifest.height }] as [string, LoadedTheme];
 }));
 
-export function registerTheme(id: string, template: string, stylesheet: string) {
+export function registerTheme(id: string, template: string, stylesheet: string, width: number, height: number, dataLayout: string) {
   themes.set(id, {
     template: HandlebarsCompiler.compile<ThemeData>(template, { strict: true }),
     stylesheet,
-    shrinkTokens: template.includes('tokensFontSize'),
-    width: 1920, height: 462,
+    shrinkTokens: dataLayout === 'bars' || dataLayout.startsWith('service-') || template.includes('tokensFontSize'),
+    width, height,
   });
 }
+
+export function unregisterTheme(id: string) { themes.delete(id); }
 
 let gate = Promise.resolve();
 function enqueue<T>(work: () => Promise<T>): Promise<T> {
@@ -175,6 +178,7 @@ export async function startThemeRenderer() {
     if (rendering) return;
     rendering = true;
     try {
+      await loadStyleCatalog();
       while (requested) {
         requested = false;
         const request = await Display.RenderRequest();
@@ -193,6 +197,7 @@ export async function startThemeRenderer() {
 
   const schedule = () => { void pump().catch(reportFrontendError); };
   const unsubscribe = Events.On('display:render-requested', schedule);
+  const catalogChanged = Events.On('styles:changed', () => { invalidateStyleCatalog(); schedule(); });
   schedule();
-  if (import.meta.hot) import.meta.hot.dispose(unsubscribe);
+  if (import.meta.hot) import.meta.hot.dispose(() => { unsubscribe(); catalogChanged(); });
 }
