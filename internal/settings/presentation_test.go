@@ -16,26 +16,28 @@ const smallDisplay = `USB\VID_1A86&PID_5722\USB35INCHIPSV2`
 
 func presentationThemes() map[string]display.Theme {
 	return map[string]display.Theme{
-		"gauges":    {ID: "gauges", Width: 1920, Height: 462, DataLayout: "gauges"},
-		"bars":      {ID: "bars", Width: 1920, Height: 462, DataLayout: "bars"},
-		"landscape": {ID: "landscape", Width: 480, Height: 320, DataLayout: "service-gauges"},
-		"portrait":  {ID: "portrait", Width: 320, Height: 480, DataLayout: "service-bars"},
+		"gauges":              {ID: "gauges", Width: 1920, Height: 462, DataLayout: "gauges"},
+		"bars":                {ID: "bars", Width: 1920, Height: 462, DataLayout: "bars"},
+		"landscape":           {ID: "landscape", Width: 480, Height: 320, DataLayout: "service-gauges"},
+		"portrait":            {ID: "portrait", Width: 320, Height: 480, DataLayout: "service-bars"},
+		"gauges-35-landscape": {ID: "gauges-35-landscape", Width: 480, Height: 320, DataLayout: "service-gauges"},
 	}
 }
 
-func TestCompatibleStylesFollowCapabilitiesWithoutSavingOrAutoSelecting(t *testing.T) {
+func TestCompatibleStylesFollowCapabilitiesAndCorrectIncompatibleSelection(t *testing.T) {
 	for _, tc := range []struct {
-		name    string
-		target  string
-		devices []turzx.Device
-		count   int
-		warning bool
+		name      string
+		target    string
+		devices   []turzx.Device
+		count     int
+		warning   bool
+		corrected bool
 	}{
-		{name: "Automatic offline", count: 4},
-		{name: "Automatic small", devices: []turzx.Device{{ID: smallDisplay}}, count: 2, warning: true},
+		{name: "Automatic offline", count: 5},
+		{name: "Automatic small", devices: []turzx.Device{{ID: smallDisplay}}, count: 3, corrected: true},
 		{name: "Automatic large", devices: []turzx.Device{{ID: first}}, count: 2},
-		{name: "Automatic identifier order", devices: []turzx.Device{{ID: first}, {ID: smallDisplay}}, count: 2, warning: true},
-		{name: "explicit small offline", target: smallDisplay, count: 2, warning: true},
+		{name: "Automatic identifier order", devices: []turzx.Device{{ID: first}, {ID: smallDisplay}}, count: 3, corrected: true},
+		{name: "explicit small offline", target: smallDisplay, count: 3, corrected: true},
 		{name: "explicit large offline", target: first, count: 2},
 		{name: "unknown saved device", target: "unknown", count: 0, warning: true},
 	} {
@@ -51,18 +53,22 @@ func TestCompatibleStylesFollowCapabilitiesWithoutSavingOrAutoSelecting(t *testi
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(view.CompatibleThemeIDs) != tc.count || (view.OutputWarning != "") != tc.warning || view.LimitStyle != "gauges" || len(view.Themes) != 4 {
+			style, generation := "gauges", uint64(1)
+			if tc.corrected {
+				style, generation = "gauges-35-landscape", 2
+			}
+			if len(view.CompatibleThemeIDs) != tc.count || (view.OutputWarning != "") != tc.warning || view.LimitStyle != style || len(view.Themes) != 5 {
 				t.Fatalf("unexpected derived selection: %+v", view)
 			}
 			after, _ := os.ReadFile(path)
-			if !bytes.Equal(before, after) || view.Generation != 1 {
-				t.Fatal("reading candidates changed saved state")
+			if bytes.Equal(before, after) == tc.corrected || view.Generation != generation {
+				t.Fatal("selection correction did not match saved state and generation")
 			}
 			if tc.name == "Automatic small" {
 				devices = []turzx.Device{{ID: first}}
 				view, _ = s.Get()
-				if view.OutputWarning != "" || view.Generation != 1 || view.LimitStyle != "gauges" {
-					t.Fatal("connection update saved or automatically chose a style")
+				if view.OutputWarning != "" || view.Generation != 3 || view.LimitStyle != "gauges" {
+					t.Fatal("connection update did not correct the incompatible style")
 				}
 			}
 		})
@@ -81,17 +87,17 @@ func TestStyleSelectionRevalidatesTheCurrentAutomaticDevice(t *testing.T) {
 	// The selector was populated for the small device, which disconnects before Save.
 	devices = []turzx.Device{{ID: first}}
 	_, err = s.Save(SaveRequest{Source: "Local", LimitStyle: "portrait"})
-	if fieldErrors(t, err)["limitStyle"] == "" {
-		t.Fatal("an incompatible selection was accepted")
+	if err != nil {
+		t.Fatal(err)
 	}
 	after, _ := s.Get()
 	current, _ := os.ReadFile(path)
-	if after.Generation != before.Generation || after.LimitStyle != "landscape" || !bytes.Equal(data, current) {
-		t.Fatal("rejected style selection changed state")
+	if after.Generation != before.Generation+1 || after.LimitStyle != "gauges" || bytes.Equal(data, current) {
+		t.Fatal("stale style selection was not corrected for the current output")
 	}
-	// Changing only Output is allowed to preserve the old style and warn.
+	// An output-only save keeps the corrected compatible style.
 	after, err = s.Save(SaveRequest{Source: "Local", DisplayID: first})
-	if err != nil || after.OutputWarning == "" || after.LimitStyle != "landscape" {
+	if err != nil || after.OutputWarning != "" || after.LimitStyle != "gauges" {
 		t.Fatalf("output-only change: %+v, %v", after, err)
 	}
 }

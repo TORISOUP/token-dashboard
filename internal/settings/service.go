@@ -128,9 +128,6 @@ type Service struct {
 	awayMinutes int
 	themes      map[string]display.Theme
 	generation  uint64
-	// The stage-3 startup composition supplies memory storage and selection preparation.
-	memory       *file
-	prepareStyle func(file, []turzx.Device) (file, error)
 }
 
 func New(path, appID string, list func() ([]turzx.Device, error), logger *slog.Logger) *Service {
@@ -271,17 +268,15 @@ func (s *Service) Save(req SaveRequest) (view View, err error) {
 	}
 	if s.themes != nil && req.LimitStyle != "" {
 		id := themeID(req.LimitStyle)
-		theme, exists := s.themes[id]
+		_, exists := s.themes[id]
 		if !exists {
 			fields["limitStyle"] = "Choose a display style."
-		} else if s.prepareStyle == nil && id != themeID(saved.LimitStyle) && !supportsTheme(targetID(next, devices), theme) {
-			fields["limitStyle"] = "Choose a style supported by the selected output."
 		}
 	}
 	if len(fields) > 0 {
 		return View{}, fault.Validation(fields)
 	}
-	next, err = s.prepareSelection(next, devices)
+	next, err = s.compatibleStyle(next, devices)
 	if err != nil {
 		return View{}, err
 	}
@@ -319,9 +314,6 @@ func (s *Service) Save(req SaveRequest) (view View, err error) {
 }
 
 func (s *Service) read() (file, connection, error) {
-	if s.memory != nil {
-		return *s.memory, connection{}, nil
-	}
 	var saved file
 	var conn connection
 	var data []byte
@@ -369,10 +361,6 @@ func (s *Service) read() (file, connection, error) {
 
 // write replaces the file only after the new content is fully on disk.
 func (s *Service) write(saved file) error {
-	if s.memory != nil {
-		*s.memory = saved
-		return nil
-	}
 	data, err := json.MarshalIndent(saved, "", "  ")
 	if err != nil {
 		return err

@@ -119,7 +119,7 @@ mise を使う場合は、`mise install` で `mise.toml` の版のツールを�
 | インストーラーの作成 | `node scripts/run.mjs package` | `bin\token-monitor-turzx-<版>-amd64-setup.exe` ができます。版は `build/app.json` の `version` です。リリースの版はタグで決まるため、`build/app.json` の `version` は上げません |
 | リリース | `mise run release:tag`（版を指定するときは `mise run release:tag 1.2.0`） | 最新のタグ（タグがなければ `build/app.json` の `version`）の patch を1つ上げた `v<版>` のタグを、指定したときはその版のタグを push します。コミットしていない変更がない状態で、`origin/main` に含まれるコミットで実行します。push したタグで CI が検証、インストーラーの作成、`update.json` の署名、GitHub Releases の最新リリースへの公開を行い、各 PC のアプリが次の起動時に新版として取得します |
 
-3.5インチの実処理確認では、保存済みの実Hub接続設定を監査用ディレクトリへ複製し、`WAILS_DATA_DIR`に指定してデスクトップアプリを起動します。`Output`で対応機器を、`Style`で4種類の3.5インチ標準スタイルを手動で選択します。反転、Service content、個別枠、Page intervalを操作し、実機と正立したプレビューを比較します。再起動後は設定が復元され、先頭ページから再開することを確認します。監査の自動操作は前述のPlaywright CLIでWebView2へ接続して行います。接続失敗でも実データ取得を維持し、固定データへの切り替えは行いません。実処理の確認では、下記Styleモックの起動オプションを指定しません。
+3.5インチの実処理確認では、保存済みの実Hub接続設定を監査用ディレクトリへ複製し、`WAILS_DATA_DIR`に指定してデスクトップアプリを起動します。`Output`で対応機器を、`Style`で4種類の3.5インチ標準スタイルを手動で選択します。反転、Service content、個別枠、Page intervalを操作し、実機と正立したプレビューを比較します。再起動後は設定が復元され、先頭ページから再開することを確認します。監査の自動操作は前述のPlaywright CLIでWebView2へ接続して行います。接続失敗でも実データ取得を維持し、固定データへの切り替えは行いません。通常起動では設定のファイル保存と実取得元を使います。
 
 デスクトップ版のビルドとインストーラーの作成では、環境変数 `BUILD_APP_VERSION`・`BUILD_UPDATE_SOURCE`・`BUILD_UPDATE_PUBLIC_KEY` を指定すると、版番号・更新元・公開鍵を、`build/app.json` の代わりにその値にします（指定しない項目は `build/app.json` の値のまま）。値はビルド時に実行ファイルへ埋め込み、実行時の環境変数では変わりません。リリースの CI は `BUILD_APP_VERSION` だけをタグの版にし、更新の E2E は3つとも指定して、手元の更新元を使う版を作ります。
 
@@ -143,14 +143,13 @@ SettingsでAway timeを保存し、対象プロセスへのロック・復帰通
 Ctrl+Cで終了し、一時設定も削除します。
 検証用サーバーはUSB送信を行いません。
 
-### 不適合スタイルの自動補正を画面モックで確認する
+### 不適合スタイルの自動補正を実機で確認する
 
-`node scripts/run.mjs generate`、`npm --prefix frontend run build`、`node scripts/build.mjs server`でビルドし、`node scripts/mock-style-ux.mjs`を起動します。
-画面URLは`http://127.0.0.1:34146/`です。
-明示起動時だけ`WAILS_STYLE_MOCK=1`を設定し、[UCP-2の合成点](design/UCP-2.md)でメモリ内の旧Bars設定、3.5インチ・9.2インチの機器一覧、Localの利用状況の固定表を使います。
-初期表示の3.5インチ用Gaugesへの補正と、Style欄からの手動選択、Outputを両機種間で切り替えたときの補正を確認します。
-プレビューは共通のCanvas描画です。USB出力、実Hub接続、設定ファイルへの保存の確認には使いません。
-Ctrl+Cで終了します。再起動すると初期条件に戻ります。通常起動ではこの環境変数を指定せず、実処理の失敗からモックへ切り替えません。
+保存済みの実Hub接続設定を監査用ディレクトリへ複製し、`limitStyle`を既存の`Bars`、表示先を対応する3.5インチにしてデスクトップアプリを起動します。元の設定ファイルは変更しません。
+旧Bars設定が3.5インチ用の既定スタイルへ補正・保存され、実Hubのデータを受信して実機とプレビューへ表示することを確認します。
+Style欄からPortraitやBarsを選び、再起動後も維持することを確認します。Outputを9.2インチへ変更した場合は大型Gaugesへ補正し、対応する3.5インチへ戻すと既定スタイルへ補正することを確認します。
+操作手順はPlaywright CLIでWebView2へ接続して自動実行します。機器を接続できない側への送信や物理的な抜き差しは、未検証として区別します。
+固定機器・固定利用状況・メモリ設定へ切り替える起動オプションはありません。確認後の終了方法は上記の実機確認手順に従います。
 
 完成系では`node scripts/build.mjs desktop-dev`で今回のデスクトップアプリをビルドし、保存済みLocal設定の複製を`WAILS_DATA_DIR`へ指定して起動します。
 `WAILS_WEBVIEW_DEBUG_PORT=0`で空きポートを選び、設定ディレクトリの`webview/EBWebView/DevToolsActivePort`の1行目を使って`playwright-cli attach --cdp=http://127.0.0.1:<port>`で接続します。

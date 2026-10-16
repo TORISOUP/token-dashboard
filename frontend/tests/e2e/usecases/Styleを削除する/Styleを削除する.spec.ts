@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { startServer } from '../../support/server';
+import { saveLargeDisplayFixture, startServer } from '../../support/server';
 
 // The server build has no task tray. Opening the page stands in for opening the window.
 const root = resolve(import.meta.dirname, '../../../../..');
@@ -26,6 +26,7 @@ test('追加した表示スタイルを1つアプリの定義から取り除く'
   writeStyle(join(dataDir, 'styles', 'night'), 'night', 'Night');
   writeStyle(join(dataDir, 'styles', 'dawn'), 'dawn', 'Dawn');
   writeFileSync(join(dataDir, 'settings.json'), JSON.stringify({ source: 'Local', displayID: '', displayName: '', limitStyle: 'Gauges' }));
+  saveLargeDisplayFixture(dataDir);
   const settings = readFileSync(join(dataDir, 'settings.json'), 'utf8');
   let server = await startServer(dataDir, 34131);
   try {

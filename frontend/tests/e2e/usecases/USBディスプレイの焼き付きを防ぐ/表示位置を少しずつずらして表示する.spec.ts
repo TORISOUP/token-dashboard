@@ -3,7 +3,7 @@ import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSy
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { startServer } from '../../support/server';
+import { saveLargeDisplayFixture, startServer } from '../../support/server';
 import { startHub } from '../../support/hub';
 import { localHome, shortIntervals } from '../../support/local';
 import { checkPNGShift, measure, type Frame, type PNGFrame } from '../../support/shift';
@@ -31,6 +31,7 @@ function stats(remaining: number) {
 test('TURZXへ送る画像だけを一定時間ごとに少しずつずらす', async ({ page, context }) => {
   test.setTimeout(180_000);
   const dataDir = mkdtempSync(join(tmpdir(), 'turzx-shift-e2e-'));
+  saveLargeDisplayFixture(dataDir);
   const hub = await startHub();
   let server = await startServer(dataDir, 34150, shortIntervals);
   let frames: Frame[] = [];

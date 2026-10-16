@@ -44,6 +44,6 @@ sequenceDiagram
 
 巡回設定の反映: `internal/settings/presentation.go`の`DisplayConfiguration`が、サービス表示用スタイルには巡回ONと`serviceCycleSeconds`、大型表示用スタイルには`cycle`と`cycleSeconds`を渡す。ページと期限の管理は`internal/display/presentation_run.go`で共用し、使用中の間隔の変更だけで現在ページを保って期限を数え直す。使用していない側の巡回設定の変更ではページと期限を変えない。
 
-モックの境界: Styleの段階3モックだけ、`mock_style.go`の`startStyleMock`がメモリ設定・機器一覧・利用状況の固定表を選ぶ。通常起動では有効にしない。`settings.View`・`settings.SaveRequest`・`display.Theme`・`display.Configuration`を本番と共有し、スタイル補正とCanvas描画を再実装しない。実処理の失敗から固定値へ切り替えない。
+モックの境界: 設定の保存先、機器一覧、利用状況を固定値へ切り替える合成点は置かない。[保存形式](data.md)に従って設定を読み書きし、実処理の失敗から固定値へ切り替えない。自動検証の固定応答は外部システム境界で供給する。
 
 UC 固有の逸脱: なし

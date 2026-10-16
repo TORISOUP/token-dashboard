@@ -115,8 +115,9 @@ test('3.5インチのスタイル、サービス別巡回、スキップと保�
       await expect(page.getByRole('option')).toHaveCount(4);
       await expect(page.getByRole('option', { name: 'Gauges', exact: true })).toHaveCount(0);
       await page.keyboard.press('Escape');
-      await expect(page.getByText(/Selected style size is not supported/)).toBeVisible();
-      expect(file().limitStyle).toBe('Gauges');
+      await expect(page.getByText(/Selected style size is not supported/)).toHaveCount(0);
+      await expect(page.getByRole('textbox', { name: 'Display style' })).toHaveValue('Gauges 3.5" Landscape');
+      expect(file().limitStyle).toBe('gauges-35-landscape');
     });
     await test.step('手順2', async () => {
       for (const [label, id, width, height] of styles) {

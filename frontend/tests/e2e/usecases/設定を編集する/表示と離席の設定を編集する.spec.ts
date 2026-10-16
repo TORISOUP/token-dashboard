@@ -2,18 +2,19 @@ import { test, expect } from '@playwright/test';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { startServer } from '../../support/server';
+import { saveLargeDisplayFixture, startServer } from '../../support/server';
 
 // The server build has no task tray. Opening the page stands in for opening the window, and stopping the
 // process for Exit. A key is saved with the value the page sends, so the saved file is read for it.
 test('Settings 画面で Cycle・Cycle time・Away time を Save なしで保存する', async ({ page, context }) => {
   test.setTimeout(120_000);
   const dataDir = mkdtempSync(join(tmpdir(), 'turzx-settings-e2e-'));
+  const displayID = saveLargeDisplayFixture(dataDir);
   let server = await startServer(dataDir, 34152);
   const cycle = () => page.getByRole('switch', { name: 'Cycle' });
   const time = () => page.getByRole('textbox', { name: 'Cycle time' });
   const away = () => page.getByRole('textbox', { name: 'Away time' });
-  // Nothing is saved until the first change, so the file may not exist yet.
+  // The output fixture is saved; the setting values are still their defaults.
   const file = () => { try { return JSON.parse(readFileSync(join(dataDir, 'settings.json'), 'utf8')); } catch { return {}; } };
   const enter = async (input: ReturnType<typeof time>, value: string) => { await input.fill(value); await input.press('Enter'); };
   const leave = async (input: ReturnType<typeof time>, value: string) => { await input.fill(value); await input.blur(); };
@@ -24,7 +25,7 @@ test('Settings 画面で Cycle・Cycle time・Away time を Save なしで保存
     });
     await test.step('手順1', async () => {
       // Settings is the last item of the menu. Separate cards hold 9.2-inch and common settings, and nothing
-      // is saved yet: Cycle is off, the time is 10 seconds and Away time is 10 minutes.
+      // has been changed yet: Cycle is off, the time is 10 seconds and Away time is 10 minutes.
       await expect(page.getByRole('navigation', { name: 'Menu' }).getByRole('link')).toHaveText(['Display', 'Styles', 'Connection', 'Settings']);
       await page.getByRole('link', { name: 'Settings' }).click();
       await expect(page.getByRole('heading', { name: 'Settings', level: 2 })).toBeVisible();
@@ -110,7 +111,7 @@ test('Settings 画面で Cycle・Cycle time・Away time を Save なしで保存
       // Saving them leaves the other saved values as they were.
       const saved = file();
       expect(saved.source).toBe('Local');
-      expect(saved.displayID).toBe('');
+      expect(saved.displayID).toBe(displayID);
       expect(saved.limitStyle ?? 'Gauges').toBe('Gauges');
       expect(saved.hiddenLimits ?? []).toEqual([]);
     });

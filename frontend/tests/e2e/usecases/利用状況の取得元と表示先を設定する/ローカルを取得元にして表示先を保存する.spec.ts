@@ -31,7 +31,7 @@ test('Local と表示先を保存し、再起動後もローカルの利用状�
   let server = await startServer(dataDir, 34118, env);
   const source = page.getByRole('textbox', { name: 'Data source' });
   const device = page.getByRole('textbox', { name: 'Output device' });
-  let selectedDevice = 'Automatic';
+  let selectedDevice = 'TURZX E2E 9.2-inch (Disconnected)';
   const open = (name: 'Display' | 'Connection') => page.getByRole('link', { name }).click();
   try {
     await test.step('開始条件', async () => {
@@ -49,7 +49,7 @@ test('Local と表示先を保存し、再起動後もローカルの利用状�
       await device.click();
       await expect(page.getByRole('option', { name: 'Automatic' })).toBeVisible();
       const connected = page.getByRole('option', { name: /^TURZX.*\([0-9A-F]{8}\)$/ });
-      if (await connected.count()) selectedDevice = (await connected.first().textContent())?.trim() ?? 'Automatic';
+      if (await connected.count()) selectedDevice = (await connected.first().textContent())?.trim() ?? selectedDevice;
       await page.keyboard.press('Escape');
     });
     await test.step('手順2', async () => {
@@ -75,9 +75,10 @@ test('Local と表示先を保存し、再起動後もローカルの利用状�
       // The Display page has no Save button, and a saved choice shows no message.
       await expect(page.getByRole('button', { name: 'Save' })).toHaveCount(0);
       await expect(page.getByText('Saved.')).toHaveCount(0);
-      await expect.poll(() => JSON.parse(readFileSync(join(dataDir, 'settings.json'), 'utf8')).displayName || 'Automatic').toBe(selectedDevice);
+      const selectedName = selectedDevice.replace(/ \(Disconnected\)$/, '');
+      await expect.poll(() => JSON.parse(readFileSync(join(dataDir, 'settings.json'), 'utf8')).displayName || 'Automatic').toBe(selectedName);
       const saved = JSON.parse(readFileSync(join(dataDir, 'settings.json'), 'utf8'));
-      expect(saved.displayName || 'Automatic').toBe(selectedDevice);
+      expect(saved.displayName || 'Automatic').toBe(selectedName);
       await expect.poll(() => divider(page), { timeout: 90_000 }).toEqual([42, 47, 58]);
     });
     await test.step('手順4', async () => {

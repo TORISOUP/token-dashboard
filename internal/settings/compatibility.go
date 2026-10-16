@@ -25,17 +25,10 @@ func (s *Service) compatibleStyle(saved file, devices []turzx.Device) (file, err
 	return saved, nil
 }
 
-func (s *Service) prepareSelection(saved file, devices []turzx.Device) (file, error) {
-	if s.prepareStyle == nil {
-		return saved, nil
-	}
-	return s.prepareStyle(saved, devices)
-}
-
 // reconcileStyle commits a correction before changing the generation or notifying rendering.
-// The caller holds the settings lock; the stage-3 mock uses the same path with memory storage.
+// The caller holds the settings lock.
 func (s *Service) reconcileStyle(saved file, devices []turzx.Device) (file, error) {
-	next, err := s.prepareSelection(saved, devices)
+	next, err := s.compatibleStyle(saved, devices)
 	if err != nil || next.LimitStyle == saved.LimitStyle {
 		return saved, err
 	}
