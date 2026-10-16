@@ -53,7 +53,7 @@ test('3.5インチのスタイル、サービス別巡回、スキップと保�
   const { home, env } = localHome();
   const hub = await startHub();
   // A saved explicit selection remains selectable while unplugged. No physical USB is opened.
-  writeFileSync(settingsFile, JSON.stringify({ source: 'Local', displayID: smallID, displayName: 'TURZX 3.5"', limitStyle: 'Gauges', cycle: false, cycleSeconds: 37 }));
+  writeFileSync(settingsFile, JSON.stringify({ source: 'Local', displayID: smallID, displayName: 'TURZX 3.5"', limitStyle: 'Bars', cycle: false, cycleSeconds: 37 }));
   let server = await startServer(dataDir, 34137, env);
   let frame: FrameRequest | undefined;
   let completed: { request: FrameRequest; png: string; device: string } | undefined;
@@ -118,6 +118,19 @@ test('3.5インチのスタイル、サービス別巡回、スキップと保�
       await expect(page.getByText(/Selected style size is not supported/)).toHaveCount(0);
       await expect(page.getByRole('textbox', { name: 'Display style' })).toHaveValue('Gauges 3.5" Landscape');
       expect(file().limitStyle).toBe('gauges-35-landscape');
+      const select = page.getByRole('textbox', { name: 'Display style' });
+      await expect(select).toBeEnabled();
+      const appearance = await select.evaluate(input => ({ color: getComputedStyle(input).color, text: getComputedStyle(document.body).color, cursor: getComputedStyle(input).cursor }));
+      expect(appearance.color).toBe(appearance.text);
+      expect(appearance.cursor).toBe('pointer');
+      await select.focus(); await select.press('ArrowDown');
+      await expect(page.getByRole('option')).toHaveCount(4);
+      expect(await select.evaluate(input => getComputedStyle(input).outlineStyle)).toBe('solid');
+      await page.keyboard.press('Escape');
+      const saved = readFileSync(settingsFile);
+      const generation = (await rpc<View>(page, settingsGet)).generation;
+      for (let i = 0; i < 3; i++) expect((await rpc<View>(page, settingsGet)).generation).toBe(generation);
+      expect(readFileSync(settingsFile).equals(saved)).toBe(true);
     });
     await test.step('手順2', async () => {
       for (const [label, id, width, height] of styles) {
@@ -253,6 +266,14 @@ test('3.5インチのスタイル、サービス別巡回、スキップと保�
       await expect.poll(() => frame?.data.service?.key, { timeout: 10_000 }).not.toBe(current);
       await expect(preview()).toBeVisible();
       expect(hub.streams()).toBe(1);
+      // A stale selector request is corrected against the output at the actual save boundary.
+      const saved = file();
+      const corrected = await rpc<View>(page, 'token-monitor-turzx/internal/settings.Service.Save', [{ source: view.source, url: view.url, displayID: smallID, limitStyle: 'Bars' }]);
+      expect(corrected.limitStyle).toBe('gauges-35-landscape');
+      expect(corrected.outputWarning).toBe('');
+      expect(file()).toEqual({ ...saved, limitStyle: 'gauges-35-landscape', connection: expect.any(String) });
+      await expect.poll(() => completed?.request.theme).toBe('gauges-35-landscape');
+      expect(hub.streams()).toBe(1);
     });
     await test.step('手順9', async () => {
       // Native window hiding keeps the renderer resident; a server page stands in for reopening the window.
@@ -265,6 +286,7 @@ test('3.5インチのスタイル、サービス別巡回、スキップと保�
     });
     await test.step('手順10', async () => {
       await selectStyle(...styles[3]);
+      const savedBeforeRestart = readFileSync(settingsFile);
       await page.close(); await server.stop();
       await expect.poll(() => hub.streams()).toBe(0);
       frame = undefined; completed = undefined; requests.clear();
@@ -280,6 +302,8 @@ test('3.5インチのスタイル、サービス別巡回、スキップと保�
       expect(file().cycleSeconds).toBe(70);
       expect(file().cycle ?? false).toBe(false);
       await expect(interval()).toHaveValue('50 s');
+      expect(file().limitStyle).toBe(styles[3][1]);
+      expect(readFileSync(settingsFile).equals(savedBeforeRestart)).toBe(true);
     });
     await test.step('受け入れ条件', async () => {
       await setPageInterval(5);
